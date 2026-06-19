@@ -1,0 +1,26 @@
+[package]
+name = "countingsheep"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[lints]
+workspace = true
+
+[workspace.lints.rust]
+future_incompatible = "warn"
+nonstandard_style = "warn"
+rust_2018_idioms = "warn"
+rust_2018_compatibility = "warn"
+rust_2021_compatibility = "warn"
+unused = "warn"
+
+[workspace.lints.rustdoc]
+unescaped_backticks = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
+[dependencies]
