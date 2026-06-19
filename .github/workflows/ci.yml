@@ -14,11 +14,15 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # renovate: datasource=crate depName=cargo-deny versioning=semver
+  CARGO_DENY_VERSION: 0.19.9
+  # renovate: datasource=crate depName=cargo-machete versioning=semver
+  CARGO_MACHETE_VERSION: 0.9.2
 
 jobs:
   backend-lint:
     name: Backend / Lint
-    runs-on: ubuntu
+    runs-on: ubuntu-24.04
 
     env:
       RUSTFLAGS: '-D warnings'
@@ -41,8 +45,8 @@ jobs:
       - run: cargo doc --no-deps --document-private-items
 
   backend-deps:
-    name: Backend / dependencies
-    runs-on: ubuntu
+    name: Backend / Dependencies
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -61,7 +65,7 @@ jobs:
 
   backend-test:
     name: Backend / Test
-    runs-on: ubuntu
+    runs-on: ubuntu-24.04
     
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -72,3 +76,5 @@ jobs:
         
       - name: Install latest nextest release
         uses: taiki-e/install-action@nextest
+
+      - run: cargo nextest run --all-features --workspace --no-tests=pass
