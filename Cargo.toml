@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["crates/countingsheep_env_vars"]
+members = ["crates/countingsheep_env_vars", "crates/countingsheep_test_utils"]
 
 [lints]
 workspace = true
@@ -37,3 +37,6 @@ tower = "0.5.2"
 tower-http = { version = "0.6.2", features = ["trace", "catch-panic", "timeout", "compression-full"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+countingsheep_test_utils = { path = "crates/countingsheep_test_utils" }
