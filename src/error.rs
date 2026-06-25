@@ -42,8 +42,6 @@ impl IntoResponse for AppError {
 mod tests {
     use super::*;
     use axum::body::to_bytes;
-    use axum::http::StatusCode;
-    use axum::response::IntoResponse;
 
     #[tokio::test]
     async fn not_found_renders_404_json() {
@@ -63,5 +61,23 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json, serde_json::json!({ "errors": [{ "detail": "nope" }] }));
+    }
+
+    #[tokio::test]
+    async fn internal_hides_cause_and_returns_500() {
+        let error = AppError::Internal(anyhow::anyhow!("db dsn: secret://do-not-leak"));
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        // Client sees a generic message...
+        assert_eq!(
+            json,
+            serde_json::json!({ "errors": [{ "detail": "internal server error" }] })
+        );
+        // ...and the underlying cause must never reach the response body.
+        let text = String::from_utf8_lossy(&body);
+        assert!(!text.contains("secret"));
     }
 }
