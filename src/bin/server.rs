@@ -20,7 +20,7 @@ fn main() -> anyhow::Result<()> {
     // `EnvFilter`) and `PORT` see it. Real env vars are never overridden.
     countingsheep_env_vars::load();
 
-    countingsheep::util::tracing::init()?;
+    countingsheep::util::tracing::init();
 
     let config = Server::from_environment(expose_externally)?;
 

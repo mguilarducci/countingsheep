@@ -1,6 +1,7 @@
 //! `tracing` subscriber setup for the binary and for tests.
 
 use countingsheep_env_vars::var;
+use tracing::warn;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
@@ -11,14 +12,20 @@ use tracing_subscriber::{EnvFilter, fmt};
 /// or JSON when `RUST_LOG_FORMAT=json`. Requires `.env` to already be loaded
 /// (see [`countingsheep_env_vars::load`]) so `RUST_LOG` is visible to the
 /// `EnvFilter`.
-pub fn init() -> anyhow::Result<()> {
+pub fn init() {
     let env_filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())
         .from_env_lossy();
 
-    let json = matches!(var("RUST_LOG_FORMAT")?.as_deref(), Some("json"));
+    // A failure to read RUST_LOG_FORMAT must not take down startup; warn and
+    // fall back to the compact human format.
+    let log_format = var("RUST_LOG_FORMAT")
+        .inspect_err(|error| {
+            warn!("Failed to read RUST_LOG_FORMAT, falling back to default: {error}");
+        })
+        .unwrap_or_default();
 
-    if json {
+    if log_format.as_deref() == Some("json") {
         tracing_subscriber::registry()
             .with(fmt::layer().json().with_filter(env_filter))
             .init();
@@ -27,8 +34,6 @@ pub fn init() -> anyhow::Result<()> {
             .with(fmt::layer().compact().with_filter(env_filter))
             .init();
     }
-
-    Ok(())
 }
 
 /// Initializes a test subscriber. Idempotent — safe to call from every test.
