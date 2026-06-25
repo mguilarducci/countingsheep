@@ -9,6 +9,8 @@ use tokio::signal::unix::{SignalKind, signal};
 const CORE_THREADS: usize = 4;
 
 fn main() -> anyhow::Result<()> {
+    countingsheep::util::tracing::init();
+
     let config = Server::from_environment()?;
 
     let app = App::builder().config(Arc::new(config)).build();
