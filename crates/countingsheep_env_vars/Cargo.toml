@@ -1,0 +1,12 @@
+[package]
+name = "countingsheep_env_vars"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1.0.102"
+dotenvy = "0.15.7"

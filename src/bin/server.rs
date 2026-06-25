@@ -9,7 +9,20 @@ use tokio::signal::unix::{SignalKind, signal};
 const CORE_THREADS: usize = 4;
 
 fn main() -> anyhow::Result<()> {
-    let config = Server::from_environment()?;
+    // Bind exposure is a deployment signal and must never come from a stray
+    // `.env` file, so read it from the real process environment BEFORE `.env`
+    // is loaded below. `var_os` treats any value (including non-UTF-8) as
+    // "set", matching the flag semantics.
+    let expose_externally =
+        std::env::var_os("HEROKU").is_some() || std::env::var_os("DEV_DOCKER").is_some();
+
+    // Load `.env` once, up front, so `RUST_LOG` (read by the tracing
+    // `EnvFilter`) and `PORT` see it. Real env vars are never overridden.
+    countingsheep_env_vars::load();
+
+    countingsheep::util::tracing::init();
+
+    let config = Server::from_environment(expose_externally)?;
 
     let app = App::builder().config(Arc::new(config)).build();
     let app = Arc::new(app);

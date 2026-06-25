@@ -2,8 +2,13 @@
 name = "countingsheep"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [workspace]
+members = ["crates/countingsheep_env_vars", "crates/countingsheep_test_utils"]
+
+[workspace.package]
+license = "Apache-2.0"
 
 [lints]
 workspace = true
@@ -27,5 +32,15 @@ todo = "warn"
 anyhow = "1.0.102"
 axum = { version = "0.8.9", features = ["macros"] }
 bon = "3.9.3"
+countingsheep_env_vars = { path = "crates/countingsheep_env_vars" }
 derive_more = { version = "2.1.1", features = ["deref"] }
+serde_json = "1.0.150"
+thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tower = "0.5.3"
+tower-http = { version = "0.7.0", features = ["trace", "catch-panic", "timeout", "compression-full"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+countingsheep_test_utils = { path = "crates/countingsheep_test_utils" }

@@ -1,0 +1,96 @@
+//! In-process test harness for the countingsheep HTTP app.
+
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+use axum::Router;
+use axum::body::{Body, Bytes};
+use axum::extract::connect_info::MockConnectInfo;
+use axum::http::{Method, Request, StatusCode, header};
+use axum::response::Response;
+use countingsheep::app::App;
+use countingsheep::build_handler;
+use countingsheep::config::Server;
+use http_body_util::BodyExt;
+use serde::de::DeserializeOwned;
+use tower::ServiceExt;
+
+/// A booted application, ready to accept requests in-process (no socket).
+pub struct TestApp {
+    router: Router,
+}
+
+impl TestApp {
+    /// Boots app in `Test` environment using real `build_handler`.
+    pub fn init() -> Self {
+        countingsheep::util::tracing::init_for_test();
+
+        let config = Server {
+            ip: [127, 0, 0, 1].into(),
+            port: 0,
+        };
+        let app = Arc::new(App::builder().config(Arc::new(config)).build());
+        let router = build_handler(app);
+
+        Self { router }
+    }
+
+    /// Sends a pre-built request through the full middleware stack.
+    pub async fn run(&self, request: Request<Body>) -> TestResponse {
+        // The real server is served with ConnectInfo<SocketAddr>; oneshot
+        // bypasses the socket, so inject a mock address for any layer that
+        // extracts ConnectInfo.
+        let mock_addr = SocketAddr::from(([127, 0, 0, 1], 52381));
+        let router = self.router.clone().layer(MockConnectInfo(mock_addr));
+
+        let response = router.oneshot(request).await.unwrap();
+        TestResponse::collect(response).await
+    }
+
+    /// Sends a GET request.
+    pub async fn get(&self, path: &str) -> TestResponse {
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri(path)
+            .body(Body::empty())
+            .unwrap();
+        self.run(request).await
+    }
+
+    /// Sends a POST request with a JSON body.
+    pub async fn post_json(&self, path: &str, json: serde_json::Value) -> TestResponse {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(path)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(serde_json::to_vec(&json).unwrap()))
+            .unwrap();
+        self.run(request).await
+    }
+}
+
+/// A fully-read HTTP response, with ergonomic accessors.
+pub struct TestResponse {
+    status: StatusCode,
+    body: Bytes,
+}
+
+impl TestResponse {
+    async fn collect(response: Response) -> Self {
+        let status = response.status();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        Self { status, body }
+    }
+
+    pub fn status(&self) -> StatusCode {
+        self.status
+    }
+
+    pub fn text(&self) -> String {
+        String::from_utf8_lossy(&self.body).into_owned()
+    }
+
+    pub fn json<T: DeserializeOwned>(&self) -> T {
+        serde_json::from_slice(&self.body).unwrap()
+    }
+}
