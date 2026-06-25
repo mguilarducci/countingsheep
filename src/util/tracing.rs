@@ -8,16 +8,15 @@ use tracing_subscriber::{EnvFilter, fmt};
 /// Initializes the global `tracing` subscriber.
 ///
 /// Honors `RUST_LOG` (default `INFO`). Emits compact human-readable logs,
-/// or JSON when `RUST_LOG_FORMAT=json`.
-pub fn init() {
+/// or JSON when `RUST_LOG_FORMAT=json`. Requires `.env` to already be loaded
+/// (see [`countingsheep_env_vars::load`]) so `RUST_LOG` is visible to the
+/// `EnvFilter`.
+pub fn init() -> anyhow::Result<()> {
     let env_filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())
         .from_env_lossy();
 
-    let json = matches!(
-        var("RUST_LOG_FORMAT").ok().flatten().as_deref(),
-        Some("json")
-    );
+    let json = matches!(var("RUST_LOG_FORMAT")?.as_deref(), Some("json"));
 
     if json {
         tracing_subscriber::registry()
@@ -28,6 +27,8 @@ pub fn init() {
             .with(fmt::layer().compact().with_filter(env_filter))
             .init();
     }
+
+    Ok(())
 }
 
 /// Initializes a test subscriber. Idempotent — safe to call from every test.

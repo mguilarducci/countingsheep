@@ -7,6 +7,17 @@ use anyhow::{Context, anyhow};
 use std::error::Error;
 use std::str::FromStr;
 
+/// Loads variables from a `.env` file into the process environment.
+///
+/// Call this once, early in `main`, before anything reads `RUST_LOG` (the
+/// tracing `EnvFilter` reads it straight from the process environment, so it
+/// must be populated first). Existing process variables are never overridden,
+/// so real environment variables always win over `.env`. A missing `.env` file
+/// is not an error.
+pub fn load() {
+    dotenvy::dotenv().ok();
+}
+
 /// Reads an environment variable, returning `Ok(None)` if it is unset.
 #[track_caller]
 pub fn var(key: &str) -> anyhow::Result<Option<String>> {

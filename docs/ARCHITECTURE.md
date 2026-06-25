@@ -28,7 +28,9 @@ dev-dependency.
   Trailing-slash normalization must wrap the router at the make-service level.
 - **Errors:** add a variant to `AppError` in `src/error.rs`.
 - **Config:** add fields to `Server` in `src/config/server.rs`, reading through
-  `countingsheep_env_vars`.
+  `countingsheep_env_vars`. Exception: the `DEV_DOCKER`/`HEROKU` bind-exposure
+  flags are read from the real process environment in `bin/server.rs` *before*
+  `.env` is loaded, so a stray `.env` can never flip the bind address.
 - **Observability:** `src/util/tracing.rs` configures the subscriber.
 
 ## Why "reference, not copy"
