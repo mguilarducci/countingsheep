@@ -2,9 +2,13 @@
 name = "countingsheep"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [workspace]
 members = ["crates/countingsheep_env_vars", "crates/countingsheep_test_utils"]
+
+[workspace.package]
+license = "Apache-2.0"
 
 [lints]
 workspace = true
