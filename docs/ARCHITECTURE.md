@@ -20,7 +20,9 @@ dev-dependency.
 
 ## Seams (where to extend)
 
-- **Routes:** `src/router.rs`.
+- **Routes:** `src/router.rs`. This is a private module (`mod router`), unlike
+  the `pub` `error`/`middleware`/`config` modules — add routes by editing the
+  router builder here, not by composing it from outside the crate.
 - **Global middleware:** `src/middleware.rs` (`apply_axum_middleware`). App-
   specific layers (auth, sessions, rate-limiting, metrics, CORS) go here.
   Trailing-slash normalization must wrap the router at the make-service level.

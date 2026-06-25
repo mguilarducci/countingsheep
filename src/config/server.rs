@@ -2,7 +2,7 @@
 
 use std::net::IpAddr;
 
-use countingsheep_env_vars::var_parsed;
+use countingsheep_env_vars::{var, var_parsed};
 
 pub struct Server {
     pub ip: IpAddr,
@@ -16,8 +16,8 @@ impl Server {
     /// and to localhost otherwise. The port is read from `PORT`, defaulting to
     /// `8888`.
     pub fn from_environment() -> anyhow::Result<Self> {
-        let docker = std::env::var("DEV_DOCKER").is_ok();
-        let heroku = std::env::var("HEROKU").is_ok();
+        let docker = var("DEV_DOCKER")?.is_some();
+        let heroku = var("HEROKU")?.is_some();
 
         let ip = if heroku || docker {
             [0, 0, 0, 0].into()
