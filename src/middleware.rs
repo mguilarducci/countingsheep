@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use axum::Router;
+use axum::http::StatusCode;
 use tower::ServiceBuilder;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::compression::CompressionLayer;
@@ -25,7 +26,11 @@ pub fn apply_axum_middleware(_state: AppState, router: Router) -> Router {
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
             .layer(CatchPanicLayer::new())
-            .layer(TimeoutLayer::with_status_code(axum::http::StatusCode::REQUEST_TIMEOUT, REQUEST_TIMEOUT))
+            // Use `with_status_code` because `TimeoutLayer::new` is deprecated since tower-http 0.6.7.
+            .layer(TimeoutLayer::with_status_code(
+                StatusCode::REQUEST_TIMEOUT,
+                REQUEST_TIMEOUT,
+            ))
             .layer(CompressionLayer::new()),
     )
 }

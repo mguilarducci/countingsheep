@@ -1,4 +1,4 @@
-//! In-process test harness countingsheep HTTP app.
+//! In-process test harness for the countingsheep HTTP app.
 
 use std::net::SocketAddr;
 use std::sync::Arc;

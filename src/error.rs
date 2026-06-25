@@ -50,7 +50,10 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json, serde_json::json!({ "errors": [{ "detail": "not found" }] }));
+        assert_eq!(
+            json,
+            serde_json::json!({ "errors": [{ "detail": "not found" }] })
+        );
     }
 
     #[tokio::test]
@@ -60,7 +63,10 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json, serde_json::json!({ "errors": [{ "detail": "nope" }] }));
+        assert_eq!(
+            json,
+            serde_json::json!({ "errors": [{ "detail": "nope" }] })
+        );
     }
 
     #[tokio::test]

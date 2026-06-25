@@ -31,11 +31,11 @@ where
     R::Err: Error + Send + Sync + 'static,
 {
     match var(key) {
-        Ok(Some(content)) => Ok(Some(
-            content
-                .parse()
-                .with_context(|| format!("Failed to parse {key} environment variable"))?,
-        )),
+        Ok(Some(content)) => {
+            Ok(Some(content.parse().with_context(|| {
+                format!("Failed to parse {key} environment variable")
+            })?))
+        }
         Ok(None) => Ok(None),
         Err(error) => Err(error),
     }
@@ -54,7 +54,9 @@ where
 fn required<T>(res: anyhow::Result<Option<T>>, key: &str) -> anyhow::Result<T> {
     match res {
         Ok(Some(value)) => Ok(value),
-        Ok(None) => Err(anyhow!("Failed to find required {key} environment variable")),
+        Ok(None) => Err(anyhow!(
+            "Failed to find required {key} environment variable"
+        )),
         Err(error) => Err(error),
     }
 }

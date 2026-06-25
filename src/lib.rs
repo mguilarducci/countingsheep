@@ -10,8 +10,8 @@ pub mod app;
 pub mod config;
 pub mod error;
 pub mod middleware;
-pub mod util;
 mod router;
+pub mod util;
 
 /// Builds the application's HTTP handler.
 ///
