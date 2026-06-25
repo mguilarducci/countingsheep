@@ -2,7 +2,7 @@
 
 use std::net::IpAddr;
 
-use anyhow::Context;
+use countingsheep_env_vars::var_parsed;
 
 pub struct Server {
     pub ip: IpAddr,
@@ -25,10 +25,7 @@ impl Server {
             [127, 0, 0, 1].into()
         };
 
-        let port = match std::env::var("PORT") {
-            Ok(value) => value.parse().context("PORT must be a valid port number")?,
-            Err(_) => 8888,
-        };
+        let port = var_parsed::<u16>("PORT")?.unwrap_or(8888);
 
         Ok(Server { ip, port })
     }

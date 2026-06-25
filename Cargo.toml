@@ -27,6 +27,7 @@ todo = "warn"
 [dependencies]
 anyhow = "1.0.102"
 axum = { version = "0.8.9", features = ["macros"] }
+countingsheep_env_vars = { path = "crates/countingsheep_env_vars" }
 bon = "3.9.3"
 derive_more = { version = "2.1.1", features = ["deref"] }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "net", "signal"] }

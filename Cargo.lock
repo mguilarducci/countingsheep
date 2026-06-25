@@ -116,6 +116,7 @@ dependencies = [
  "anyhow",
  "axum",
  "bon",
+ "countingsheep_env_vars",
  "derive_more",
  "tokio",
 ]
