@@ -1,0 +1,40 @@
+
+    http_req_duration
+    ✓ 'p(99)<25' p(99)=796µs
+
+    http_req_failed
+    ✓ 'rate<0.001' rate=0.00%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 15002   1000.067196/s
+    checks_succeeded...: 100.00% 15002 out of 15002
+    checks_failed......: 0.00%   0 out of 15002
+
+    ✓ status is 202
+    ✓ body is empty
+
+    HTTP
+    http_req_duration..............: avg=253.15µs min=87µs     med=246µs    max=5.13ms p(90)=356µs    p(95)=432µs   
+      { expected_response:true }...: avg=253.15µs min=87µs     med=246µs    max=5.13ms p(90)=356µs    p(95)=432µs   
+    http_req_failed................: 0.00%  0 out of 7501
+    http_reqs......................: 7501   500.033598/s
+
+    EXECUTION
+    dropped_iterations.............: 0      0/s
+    iteration_duration.............: avg=475.73µs min=181.87µs med=471.16µs max=5.66ms p(90)=677.16µs p(95)=782.16µs
+    iterations.....................: 7501   500.033598/s
+    vus............................: 1      min=0         max=1 
+    vus_max........................: 50     min=50        max=50
+
+    NETWORK
+    data_received..................: 608 kB 41 kB/s
+    data_sent......................: 1.8 MB 121 kB/s
+
+
+
+
+running (15.0s), 000/050 VUs, 7501 complete and 0 interrupted iterations
+soak ✓ [ 100% ] 000/050 VUs  15s  500.00 iters/s
+Server has gracefully shut down!

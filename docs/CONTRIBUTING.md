@@ -25,5 +25,8 @@ Or set it up locally:
 - Tests follow the TDD cycle (test -> red -> implement -> green -> commit).
 - Integration tests use `countingsheep_test_utils::TestApp` and live in
   `tests/`.
+- Load and performance tests live in `loadtest/` (a local k6 + oha harness for
+  the ingestion endpoint); run `loadtest/run.sh smoke` before pushing. See
+  [loadtest/README.md](../loadtest/README.md).
 - New public functions and types get doc comments.
 - Commits follow Conventional Commits (`feat`, `fix`, `refactor`, ...).

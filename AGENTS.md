@@ -6,6 +6,8 @@
   usage-event ingestion in `src/ingest/`).
 - `crates/countingsheep_env_vars` — env-var helpers.
 - `crates/countingsheep_test_utils` — `TestApp` integration harness.
+- `loadtest/` — local k6 + oha load-testing harness for the ingestion endpoint
+  (`loadtest/run.sh <tier>`; see `loadtest/README.md`).
 - `docs/ARCHITECTURE.md` — the architecture map and extension seams.
 
 ## Conventions

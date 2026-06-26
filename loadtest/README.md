@@ -51,11 +51,12 @@ Tooling: `brew install k6` (macOS) and `cargo install oha`.
 | Var          | Used by            | Default                   |
 |--------------|--------------------|---------------------------|
 | `BASE_URL`   | all k6 scripts     | `http://127.0.0.1:8888`   |
-| `RATE`       | load, soak         | `1000` req/s per workload |
+| `RATE`       | load, soak         | `1000` (load) / `500` (soak) req/s |
 | `DURATION`   | load, soak         | `30s` / `30m`             |
 | `BATCH_SIZE` | load, baseline     | `100`                     |
 | `PEAK`       | stress             | `10000` req/s             |
 | `SPIKE`      | spike              | `10000` req/s             |
+| `BASE_RATE`  | spike              | `200` req/s (idle baseline) |
 | `RUST_LOG`   | run.sh (server)    | `info` (try `warn`)       |
 | `PORT`       | run.sh (server)    | `8888`                    |
 
