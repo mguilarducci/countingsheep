@@ -131,8 +131,10 @@ mod tests {
     use super::*;
     use crate::ingest::sheep::Sheep;
     use crate::ingest::stamp::stamp;
+    use std::sync::{Arc, Mutex};
     use time::macros::datetime;
-    use tracing_test::traced_test;
+    use tracing::subscriber::with_default;
+    use tracing_subscriber::fmt::MakeWriter;
 
     fn sample_sheep() -> Sheep {
         Sheep {
@@ -148,14 +150,49 @@ mod tests {
         }
     }
 
-    #[traced_test]
+    /// Appends every emitted log line into a shared buffer. Capturing through a
+    /// test-local subscriber (installed only for the current thread via
+    /// `with_default`) keeps this test deterministic: it never races the global
+    /// subscriber that other tests install, unlike `tracing-test`'s shared
+    /// capture.
+    #[derive(Clone, Default)]
+    struct CaptureWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl std::io::Write for CaptureWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for CaptureWriter {
+        type Writer = CaptureWriter;
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
     #[test]
     fn record_accepted_logs_both_stamps() {
-        let accepted = stamp(sample_sheep(), datetime!(2026-06-26 10:00:00 UTC));
-        record_accepted(&accepted);
-        assert!(logs_contain("sheep accepted"));
-        assert!(logs_contain("a-1")); // the sheep's id reaches the log
-        assert!(logs_contain("occurred_at")); // when it happened
-        assert!(logs_contain("received_at")); // when we received it
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .with_writer(CaptureWriter(Arc::clone(&buffer)))
+            .finish();
+
+        with_default(subscriber, || {
+            let accepted = stamp(sample_sheep(), datetime!(2026-06-26 10:00:00 UTC));
+            record_accepted(&accepted);
+        });
+
+        let logs = String::from_utf8(buffer.lock().unwrap().clone()).unwrap();
+        assert!(logs.contains("sheep accepted"));
+        assert!(logs.contains("a-1")); // the sheep's id reaches the log
+        assert!(logs.contains("occurred_at")); // when it happened
+        assert!(logs.contains("received_at")); // when we received it
     }
 }

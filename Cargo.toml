@@ -45,4 +45,3 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 
 [dev-dependencies]
 countingsheep_test_utils = { path = "crates/countingsheep_test_utils" }
-tracing-test = "0.2.5"
