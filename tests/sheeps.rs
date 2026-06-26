@@ -136,6 +136,21 @@ async fn rejects_wrong_content_type() {
 }
 
 #[tokio::test]
+async fn accepts_case_insensitive_content_type() {
+    // RFC 9110 §8.3.1: media type and subtype are case-insensitive, so a
+    // conformant client may send a differently-cased Content-Type.
+    let app = TestApp::init();
+    let response = app
+        .post_raw(
+            "/api/v1/sheeps",
+            "Application/CloudEvents+JSON; charset=utf-8",
+            serde_json::to_vec(&valid_sheep()).unwrap(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+}
+
+#[tokio::test]
 async fn rejects_missing_content_type() {
     let app = TestApp::init();
     let request = Request::builder()
@@ -157,6 +172,11 @@ async fn rejects_wrong_method() {
         .unwrap();
     let response = app.run(request).await;
     assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+
+    // A wrong method on a known path carries the same error envelope as every
+    // other error path, not Axum's built-in empty 405 body.
+    let json: Value = response.json();
+    assert_eq!(json["errors"][0]["detail"], "method not allowed");
 }
 
 #[tokio::test]

@@ -65,6 +65,30 @@ fn optional_string(
     }
 }
 
+/// True for an absolute URI per RFC 3986 §4.3: a valid `scheme` followed by
+/// `:`, no fragment, and no raw whitespace/control characters. Intentionally
+/// scheme-keyed (not authority-based) so `urn:` and `mailto:` URIs pass.
+fn is_absolute_uri(s: &str) -> bool {
+    let Some((scheme, _rest)) = s.split_once(':') else {
+        return false;
+    };
+    let mut scheme_chars = scheme.chars();
+    let valid_scheme = matches!(scheme_chars.next(), Some(c) if c.is_ascii_alphabetic())
+        && scheme_chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    valid_scheme && !s.contains('#') && !s.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
+/// If present and non-null, must be a non-empty absolute URI.
+fn optional_uri(obj: &Map<String, Value>, key: &str, errors: &mut Vec<String>) -> Option<String> {
+    let value = optional_string(obj, key, errors)?;
+    if is_absolute_uri(&value) {
+        Some(value)
+    } else {
+        errors.push(format!("{key} must be an absolute URI"));
+        None
+    }
+}
+
 /// Validate a raw JSON value against the CloudEvents v1.0.2 contract.
 /// Collects *all* failures rather than stopping at the first.
 pub(crate) fn validate(value: Value) -> Result<Sheep, Vec<String>> {
@@ -86,7 +110,7 @@ pub(crate) fn validate(value: Value) -> Result<Sheep, Vec<String>> {
 
     let subject = optional_string(obj, "subject", &mut errors);
     let datacontenttype = optional_string(obj, "datacontenttype", &mut errors);
-    let dataschema = optional_string(obj, "dataschema", &mut errors);
+    let dataschema = optional_uri(obj, "dataschema", &mut errors);
 
     let time = optional_string(obj, "time", &mut errors);
     if let Some(t) = &time
@@ -215,5 +239,38 @@ mod tests {
     #[test]
     fn rejects_non_object_body() {
         assert!(validate(json!("just a string")).is_err());
+    }
+
+    #[test]
+    fn dataschema_must_be_absolute_uri_when_present() {
+        // CloudEvents v1.0.2 types `dataschema` as URI (RFC 3986 §4.3,
+        // absolute URI): a scheme is mandatory. A bare word or a string with
+        // spaces is non-empty but not a URI, and must be rejected.
+        for bad in ["not a uri", "relativeword", "/relative/path", "schema#frag"] {
+            let mut v = valid();
+            v["dataschema"] = json!(bad);
+            let errs = validate(v).unwrap_err();
+            assert!(
+                errs.iter()
+                    .any(|e| e.contains("dataschema") && e.contains("URI")),
+                "{bad:?} should be rejected as a non-URI, got {errs:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn dataschema_accepts_varied_absolute_uri_schemes() {
+        // Not just http(s): URNs and mailto are valid absolute URIs and must
+        // pass, so the check keys on the scheme, not on an HTTP authority.
+        for good in [
+            "https://example.com/schema.json",
+            "urn:uuid:6e8bc430-9c3a-11d9-9669-0800200c9a66",
+            "mailto:schemas@example.com",
+            "ftp://h/p",
+        ] {
+            let mut v = valid();
+            v["dataschema"] = json!(good);
+            assert!(validate(v).is_ok(), "{good:?} should be accepted");
+        }
     }
 }

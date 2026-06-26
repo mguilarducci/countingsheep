@@ -19,6 +19,9 @@ pub enum AppError {
     UnsupportedMediaType(String),
     #[error("not found")]
     NotFound,
+    /// A known path reached with an unsupported HTTP method.
+    #[error("method not allowed")]
+    MethodNotAllowed,
     /// Internal failures. The cause is logged; the client sees a generic 500.
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
@@ -35,6 +38,10 @@ impl IntoResponse for AppError {
                 (StatusCode::UNSUPPORTED_MEDIA_TYPE, vec![message])
             }
             AppError::NotFound => (StatusCode::NOT_FOUND, vec!["not found".to_string()]),
+            AppError::MethodNotAllowed => (
+                StatusCode::METHOD_NOT_ALLOWED,
+                vec!["method not allowed".to_string()],
+            ),
             AppError::Internal(error) => {
                 error!(%error, "internal server error");
                 (
@@ -67,6 +74,19 @@ mod tests {
         assert_eq!(
             json,
             serde_json::json!({ "errors": [{ "detail": "not found" }] })
+        );
+    }
+
+    #[tokio::test]
+    async fn method_not_allowed_renders_405_json() {
+        let response = AppError::MethodNotAllowed.into_response();
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "errors": [{ "detail": "method not allowed" }] })
         );
     }
 

@@ -18,7 +18,7 @@ pub(crate) async fn create_sheep(headers: HeaderMap, body: Bytes) -> AppResult<S
         .unwrap_or("");
     // Ignore parameters such as "; charset=utf-8".
     let media_type = raw_content_type.split(';').next().unwrap_or("").trim();
-    if media_type != CLOUDEVENTS_JSON {
+    if !media_type.eq_ignore_ascii_case(CLOUDEVENTS_JSON) {
         return Err(AppError::UnsupportedMediaType(format!(
             "Content-Type must be {CLOUDEVENTS_JSON}"
         )));

@@ -11,6 +11,7 @@ pub fn build_axum_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/api/v1/sheeps", post(create_sheep))
         .fallback(not_found)
+        .method_not_allowed_fallback(method_not_allowed)
         .with_state(state)
 }
 
@@ -21,4 +22,10 @@ async fn health() -> &'static str {
 /// Render unknown routes through our consistent error shape.
 async fn not_found() -> AppError {
     AppError::NotFound
+}
+
+/// Render wrong-method requests on a known path through the same error shape,
+/// so a 405 carries the `{ "errors": [...] }` envelope like every other path.
+async fn method_not_allowed() -> AppError {
+    AppError::MethodNotAllowed
 }
