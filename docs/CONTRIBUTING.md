@@ -2,6 +2,11 @@
 
 ## Setup
 
+Open the repo in the [dev container](../.devcontainer) (any editor with Dev
+Containers support) for a ready-made toolchain at full CI parity — the pinned
+Rust toolchain plus `just`, `cargo-nextest`, `cargo-deny`, and `cargo-machete`.
+Or set it up locally:
+
 1. Install the toolchain (`rustup` reads `rust-toolchain.toml`).
 2. Install [`just`](https://github.com/casey/just) and
    [`cargo-nextest`](https://nexte.st/).

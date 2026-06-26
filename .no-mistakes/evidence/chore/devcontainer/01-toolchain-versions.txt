@@ -1,0 +1,15 @@
+======================================================================
+DEVCONTAINER CI-PARITY TRANSCRIPT
+Image: countingsheep-devcontainer:test
+======================================================================
+
+### Toolchain versions (must match rust-toolchain.toml 1.96.0 + ci.yml pins)
+rustc 1.96.0 (ac68faa20 2026-05-25)
+cargo 1.96.0 (30a34c682 2026-05-25)
+rustfmt: rustfmt 1.9.0-stable (ac68faa20c 2026-05-25)
+clippy:  clippy 0.1.96 (ac68faa20c 2026-05-25)
+just 1.54.0
+cargo-nextest 0.9.138 (fc97e97bb 2026-06-21)
+cargo-deny 0.19.9
+0.9.2
+

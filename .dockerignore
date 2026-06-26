@@ -1,0 +1,13 @@
+# The devcontainer build context is the repo root, but the image only needs
+# rust-toolchain.toml. Keep the build context small and the daemon upload fast.
+target/
+debug/
+.git/
+.github/
+.devcontainer/
+.lavish/
+docs/
+**/*.rs.bk
+**/mutants.out*/
+.env
+.env.*
