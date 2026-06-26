@@ -1,8 +1,8 @@
 //! The validated `Sheep` (a CloudEvents v1.0.2 event) and its pure validator.
 
 use serde_json::{Map, Value};
-use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
+use time::{OffsetDateTime, UtcOffset};
 
 /// A usage event that has passed validation. Derives below also count as
 /// "uses" of every field, so unused optional fields don't trip `dead_code`.
@@ -13,7 +13,7 @@ pub(crate) struct Sheep {
     pub r#type: String,
     pub specversion: String,
     pub subject: Option<String>,
-    pub time: Option<String>,
+    pub time: Option<OffsetDateTime>,
     pub data: Option<Value>,
     pub datacontenttype: Option<String>,
     pub dataschema: Option<String>,
@@ -162,12 +162,21 @@ pub(crate) fn validate(value: Value) -> Result<Sheep, Vec<String>> {
     let datacontenttype = optional_media_type(obj, "datacontenttype", &mut errors);
     let dataschema = optional_uri(obj, "dataschema", &mut errors);
 
-    let time = optional_string(obj, "time", &mut errors);
-    if let Some(t) = &time
-        && OffsetDateTime::parse(t, &Rfc3339).is_err()
-    {
-        errors.push(format!("time must be RFC 3339, got \"{t}\""));
-    }
+    // Parse and *keep* the time as a UTC `OffsetDateTime`, so a consistent
+    // representation is structural rather than convention. An offset-bearing
+    // time is normalized to the equivalent UTC instant; an unparseable one is
+    // rejected. (A missing time is defaulted later, at the handler edge, where
+    // the clock lives — `validate` stays pure.)
+    let time =
+        optional_string(obj, "time", &mut errors).and_then(|t| {
+            match OffsetDateTime::parse(&t, &Rfc3339) {
+                Ok(dt) => Some(dt.to_offset(UtcOffset::UTC)),
+                Err(_) => {
+                    errors.push(format!("time must be RFC 3339, got \"{t}\""));
+                    None
+                }
+            }
+        });
 
     let data = obj.get("data").filter(|v| !v.is_null()).cloned();
 
@@ -254,6 +263,84 @@ mod tests {
                 .iter()
                 .any(|e| e.contains("RFC 3339"))
         );
+    }
+
+    #[test]
+    fn time_is_kept_as_an_offsetdatetime_normalized_to_utc() {
+        use time::UtcOffset;
+        use time::macros::datetime;
+
+        // An offset-bearing time is kept as the equivalent instant, with the
+        // stored offset normalized to UTC (D2). The instant equality alone
+        // would pass without normalization — OffsetDateTime compares instants —
+        // so the offset assertion is what actually pins "stored in UTC".
+        let mut offset = valid();
+        offset["time"] = json!("2026-06-26T12:00:00+02:00");
+        let t = validate(offset).unwrap().time.expect("time is kept");
+        assert_eq!(t, datetime!(2026-06-26 10:00:00 UTC), "same instant");
+        assert_eq!(
+            t.offset(),
+            UtcOffset::UTC,
+            "stored offset normalized to UTC"
+        );
+
+        // Fractional seconds survive the round-trip.
+        let mut frac = valid();
+        frac["time"] = json!("2026-06-26T10:00:00.5Z");
+        let t = validate(frac).unwrap().time.expect("time is kept");
+        assert_eq!(
+            t,
+            datetime!(2026-06-26 10:00:00.5 UTC),
+            "fractional preserved"
+        );
+
+        // Absent time stays absent (defaulting happens later, at the edge).
+        let mut absent = valid();
+        absent.as_object_mut().unwrap().remove("time");
+        assert_eq!(validate(absent).unwrap().time, None);
+    }
+
+    #[test]
+    fn time_boundary_values_are_handled() {
+        use time::macros::datetime;
+
+        // `-00:00` (RFC 3339 "unknown offset") is valid and accepted.
+        let mut unknown_offset = valid();
+        unknown_offset["time"] = json!("2026-06-26T10:00:00-00:00");
+        assert!(
+            validate(unknown_offset).is_ok(),
+            "-00:00 should be accepted"
+        );
+
+        // Leap second `:60`: the time crate does NOT reject it — it accepts the
+        // value and clamps to the last representable instant of the day. We pin
+        // that real behavior (verified, not assumed) so a dependency bump that
+        // changes it is caught. We do not model true leap seconds.
+        let mut leap = valid();
+        leap["time"] = json!("2026-12-31T23:59:60Z");
+        let t = validate(leap).unwrap().time.expect("leap second is kept");
+        assert_eq!(t, datetime!(2026-12-31 23:59:59.999_999_999 UTC));
+
+        // A future-dated time is accepted as-is: we record the gap, we don't
+        // police clock skew (out of scope).
+        let mut future = valid();
+        future["time"] = json!("2099-01-01T00:00:00Z");
+        assert!(validate(future).is_ok(), "future time should be accepted");
+    }
+
+    #[test]
+    fn time_with_wrong_json_type_is_rejected_not_defaulted() {
+        // A present-but-malformed time must surface an error, never silently
+        // fall through to the "now" default.
+        for bad in [json!(1_234_567_890), json!(true), json!("")] {
+            let mut v = valid();
+            v["time"] = bad.clone();
+            let errs = validate(v).unwrap_err();
+            assert!(
+                errs.iter().any(|e| e.contains("time")),
+                "{bad:?} time should be rejected, got {errs:?}"
+            );
+        }
     }
 
     #[test]

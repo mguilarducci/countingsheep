@@ -87,6 +87,20 @@ async fn rejects_bad_time() {
 }
 
 #[tokio::test]
+async fn accepts_sheep_with_offset_time() {
+    // A present, offset-bearing time is parsed, normalized to UTC, and stamped
+    // end-to-end without disturbing the 202 contract. Guards the normalization
+    // path through the full wire, complementing the timeless `accepts_valid_sheep`.
+    let app = TestApp::init();
+    let mut body = valid_sheep();
+    body["time"] = json!("2026-06-26T12:00:00+02:00");
+
+    let response = app.post_cloudevent("/api/v1/sheeps", body).await;
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert!(response.text().is_empty());
+}
+
+#[tokio::test]
 async fn reports_multiple_errors_at_once() {
     let app = TestApp::init();
     let response = app
