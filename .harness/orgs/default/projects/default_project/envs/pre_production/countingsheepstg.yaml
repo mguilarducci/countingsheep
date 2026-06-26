@@ -1,0 +1,8 @@
+environment:
+  name: countingsheep-stg
+  identifier: countingsheepstg
+  description: ""
+  tags: {}
+  type: PreProduction
+  orgIdentifier: default
+  projectIdentifier: default_project
