@@ -11,8 +11,17 @@ use tracing::error;
 pub enum AppError {
     #[error("{0}")]
     BadRequest(String),
+    /// One or more validation failures; each string becomes its own `detail`.
+    #[error("validation failed")]
+    Validation(Vec<String>),
+    /// Wrong or missing request media type.
+    #[error("{0}")]
+    UnsupportedMediaType(String),
     #[error("not found")]
     NotFound,
+    /// A known path reached with an unsupported HTTP method.
+    #[error("method not allowed")]
+    MethodNotAllowed,
     /// Internal failures. The cause is logged; the client sees a generic 500.
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
@@ -22,19 +31,31 @@ pub type AppResult<T> = Result<T, AppError>;
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, detail) = match self {
-            AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
-            AppError::NotFound => (StatusCode::NOT_FOUND, "not found".to_string()),
+        let (status, details) = match self {
+            AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, vec![message]),
+            AppError::Validation(details) => (StatusCode::BAD_REQUEST, details),
+            AppError::UnsupportedMediaType(message) => {
+                (StatusCode::UNSUPPORTED_MEDIA_TYPE, vec![message])
+            }
+            AppError::NotFound => (StatusCode::NOT_FOUND, vec!["not found".to_string()]),
+            AppError::MethodNotAllowed => (
+                StatusCode::METHOD_NOT_ALLOWED,
+                vec!["method not allowed".to_string()],
+            ),
             AppError::Internal(error) => {
                 error!(%error, "internal server error");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "internal server error".to_string(),
+                    vec!["internal server error".to_string()],
                 )
             }
         };
 
-        (status, Json(json!({ "errors": [{ "detail": detail }] }))).into_response()
+        let errors: Vec<_> = details
+            .into_iter()
+            .map(|d| json!({ "detail": d }))
+            .collect();
+        (status, Json(json!({ "errors": errors }))).into_response()
     }
 }
 
@@ -53,6 +74,19 @@ mod tests {
         assert_eq!(
             json,
             serde_json::json!({ "errors": [{ "detail": "not found" }] })
+        );
+    }
+
+    #[tokio::test]
+    async fn method_not_allowed_renders_405_json() {
+        let response = AppError::MethodNotAllowed.into_response();
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "errors": [{ "detail": "method not allowed" }] })
         );
     }
 
@@ -85,5 +119,36 @@ mod tests {
         // ...and the underlying cause must never reach the response body.
         let text = String::from_utf8_lossy(&body);
         assert!(!text.contains("secret"));
+    }
+
+    #[tokio::test]
+    async fn validation_renders_400_with_all_details() {
+        let response =
+            AppError::Validation(vec!["id is required".into(), "type is required".into()])
+                .into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "errors": [
+                { "detail": "id is required" },
+                { "detail": "type is required" }
+            ] })
+        );
+    }
+
+    #[tokio::test]
+    async fn unsupported_media_type_renders_415() {
+        let response = AppError::UnsupportedMediaType("nope".into()).into_response();
+        assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "errors": [{ "detail": "nope" }] })
+        );
     }
 }

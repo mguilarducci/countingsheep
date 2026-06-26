@@ -7,7 +7,7 @@ reusable, app-agnostic capabilities live in workspace crates under `crates/`.
 
 | Crate | Responsibility |
 | --- | --- |
-| `countingsheep` (root) | App state, router, middleware wiring, error type, config, binary |
+| `countingsheep` (root) | App state, router, middleware wiring, error type, config, binary, usage-event ingestion (`src/ingest/`) |
 | `countingsheep_env_vars` | `dotenvy`-backed env-var helpers |
 | `countingsheep_test_utils` | In-process `TestApp` harness for integration tests |
 
@@ -32,6 +32,13 @@ dev-dependency.
   flags are read from the real process environment in `bin/server.rs` *before*
   `.env` is loaded, so a stray `.env` can never flip the bind address.
 - **Observability:** `src/util/tracing.rs` configures the subscriber.
+- **Ingestion:** `src/ingest/`. `sheep.rs` holds the `Sheep` type and a pure,
+  IO-free `validate()` (CloudEvents v1.0.2; collects every failure at once);
+  `handler.rs` holds the `POST /api/v1/sheeps` handler (own content-type gate
+  and JSON parse, so errors keep our `{ "errors": [...] }` shape rather than
+  Axum's). `record_accepted()` is the single named seam for where an accepted
+  event goes — today a structured `tracing` event; durable storage or a broker
+  slots in there (THA-16/THA-17).
 
 ## Why "reference, not copy"
 

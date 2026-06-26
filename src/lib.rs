@@ -9,6 +9,7 @@ use crate::router::build_axum_router;
 pub mod app;
 pub mod config;
 pub mod error;
+mod ingest;
 pub mod middleware;
 mod router;
 pub mod util;

@@ -67,6 +67,27 @@ impl TestApp {
             .unwrap();
         self.run(request).await
     }
+
+    /// Sends a POST with an explicit Content-Type and raw body bytes.
+    pub async fn post_raw(&self, path: &str, content_type: &str, body: Vec<u8>) -> TestResponse {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(path)
+            .header(header::CONTENT_TYPE, content_type)
+            .body(Body::from(body))
+            .unwrap();
+        self.run(request).await
+    }
+
+    /// Sends a POST as `application/cloudevents+json`.
+    pub async fn post_cloudevent(&self, path: &str, json: serde_json::Value) -> TestResponse {
+        self.post_raw(
+            path,
+            "application/cloudevents+json",
+            serde_json::to_vec(&json).unwrap(),
+        )
+        .await
+    }
 }
 
 /// A fully-read HTTP response, with ergonomic accessors.

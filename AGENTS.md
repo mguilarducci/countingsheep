@@ -2,7 +2,8 @@
 
 ## Layout
 
-- `src/` — root app crate (router, middleware, error, config, binary).
+- `src/` — root app crate (router, middleware, error, config, binary,
+  usage-event ingestion in `src/ingest/`).
 - `crates/countingsheep_env_vars` — env-var helpers.
 - `crates/countingsheep_test_utils` — `TestApp` integration harness.
 - `docs/ARCHITECTURE.md` — the architecture map and extension seams.

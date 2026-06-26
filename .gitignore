@@ -36,3 +36,6 @@ target
 /target
 
 /.env
+
+# Superpowers specs/plans — kept local, attached to the Linear issue instead
+docs/superpowers/
