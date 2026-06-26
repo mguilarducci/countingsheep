@@ -1,0 +1,16 @@
+{
+  "name": "countingsheep",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "containerEnv": {
+    "DEV_DOCKER": "1",
+    "PORT": "8888"
+  },
+  "forwardPorts": [8888],
+  "mounts": [
+    "source=countingsheep-target,target=${containerWorkspaceFolder}/target,type=volume"
+  ],
+  "postCreateCommand": "sudo chown -R vscode: ${containerWorkspaceFolder}/target && just --version && cargo --version"
+}
