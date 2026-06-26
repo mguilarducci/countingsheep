@@ -6,14 +6,44 @@ use axum::response::{IntoResponse, Response};
 use serde_json::json;
 use tracing::error;
 
+/// A single validation failure. `index` ties the failure to a position within
+/// a batch submission; it is `None` for single-event requests, which keeps the
+/// single-event response shape (`{ "detail": ... }`, no `index`) unchanged.
+#[derive(Debug)]
+pub struct ValidationItem {
+    pub index: Option<usize>,
+    pub detail: String,
+}
+
+impl ValidationItem {
+    /// A failure tied to event `index` within a batch submission.
+    pub fn at(index: usize, detail: String) -> Self {
+        Self {
+            index: Some(index),
+            detail,
+        }
+    }
+}
+
+impl From<String> for ValidationItem {
+    /// A failure with no batch position (single-event path).
+    fn from(detail: String) -> Self {
+        Self {
+            index: None,
+            detail,
+        }
+    }
+}
+
 /// The application's error type. Add a variant to extend the contract.
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("{0}")]
     BadRequest(String),
-    /// One or more validation failures; each string becomes its own `detail`.
+    /// One or more validation failures; each becomes its own `detail`, carrying
+    /// an optional batch `index`.
     #[error("validation failed")]
-    Validation(Vec<String>),
+    Validation(Vec<ValidationItem>),
     /// Wrong or missing request media type.
     #[error("{0}")]
     UnsupportedMediaType(String),
@@ -29,32 +59,52 @@ pub enum AppError {
 
 pub type AppResult<T> = Result<T, AppError>;
 
+impl AppError {
+    /// Builds a `Validation` error from plain detail strings with no batch
+    /// position — the single-event ingestion path.
+    pub fn validation(details: Vec<String>) -> Self {
+        AppError::Validation(details.into_iter().map(ValidationItem::from).collect())
+    }
+}
+
+/// Renders a single detail string as `{ "detail": ... }`.
+fn detail(message: String) -> serde_json::Value {
+    json!({ "detail": message })
+}
+
+/// Renders a validation item, including `index` only when it carries one.
+fn render_validation_item(item: ValidationItem) -> serde_json::Value {
+    match item.index {
+        Some(index) => json!({ "index": index, "detail": item.detail }),
+        None => json!({ "detail": item.detail }),
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, details) = match self {
-            AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, vec![message]),
-            AppError::Validation(details) => (StatusCode::BAD_REQUEST, details),
+        let (status, errors) = match self {
+            AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, vec![detail(message)]),
+            AppError::Validation(items) => (
+                StatusCode::BAD_REQUEST,
+                items.into_iter().map(render_validation_item).collect(),
+            ),
             AppError::UnsupportedMediaType(message) => {
-                (StatusCode::UNSUPPORTED_MEDIA_TYPE, vec![message])
+                (StatusCode::UNSUPPORTED_MEDIA_TYPE, vec![detail(message)])
             }
-            AppError::NotFound => (StatusCode::NOT_FOUND, vec!["not found".to_string()]),
+            AppError::NotFound => (StatusCode::NOT_FOUND, vec![detail("not found".to_string())]),
             AppError::MethodNotAllowed => (
                 StatusCode::METHOD_NOT_ALLOWED,
-                vec!["method not allowed".to_string()],
+                vec![detail("method not allowed".to_string())],
             ),
             AppError::Internal(error) => {
                 error!(%error, "internal server error");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    vec!["internal server error".to_string()],
+                    vec![detail("internal server error".to_string())],
                 )
             }
         };
 
-        let errors: Vec<_> = details
-            .into_iter()
-            .map(|d| json!({ "detail": d }))
-            .collect();
         (status, Json(json!({ "errors": errors }))).into_response()
     }
 }
@@ -124,7 +174,7 @@ mod tests {
     #[tokio::test]
     async fn validation_renders_400_with_all_details() {
         let response =
-            AppError::Validation(vec!["id is required".into(), "type is required".into()])
+            AppError::validation(vec!["id is required".into(), "type is required".into()])
                 .into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
@@ -135,6 +185,36 @@ mod tests {
             serde_json::json!({ "errors": [
                 { "detail": "id is required" },
                 { "detail": "type is required" }
+            ] })
+        );
+    }
+
+    #[tokio::test]
+    async fn validation_without_index_omits_index_field() {
+        // The single-event path must stay byte-for-byte as before: no `index` key.
+        let response = AppError::validation(vec!["id is required".into()]).into_response();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let first = &json["errors"][0];
+        assert_eq!(first, &serde_json::json!({ "detail": "id is required" }));
+        assert!(
+            first.get("index").is_none(),
+            "index must be absent, got {first}"
+        );
+    }
+
+    #[tokio::test]
+    async fn validation_with_index_renders_index_and_detail() {
+        let response = AppError::Validation(vec![ValidationItem::at(2, "id is required".into())])
+            .into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "errors": [
+                { "index": 2, "detail": "id is required" }
             ] })
         );
     }

@@ -34,11 +34,18 @@ dev-dependency.
 - **Observability:** `src/util/tracing.rs` configures the subscriber.
 - **Ingestion:** `src/ingest/`. `sheep.rs` holds the `Sheep` type and a pure,
   IO-free `validate()` (CloudEvents v1.0.2; collects every failure at once);
-  `handler.rs` holds the `POST /api/v1/sheeps` handler (own content-type gate
-  and JSON parse, so errors keep our `{ "errors": [...] }` shape rather than
-  Axum's). `record_accepted()` is the single named seam for where an accepted
-  event goes — today a structured `tracing` event; durable storage or a broker
-  slots in there (THA-16/THA-17).
+  `handler.rs` holds the `POST /api/v1/sheeps` handler, which dispatches on
+  `Content-Type`: `application/cloudevents+json` is a single event;
+  `application/cloudevents-batch+json` is a JSON array of events. The handler
+  owns its content-type gate and JSON parse, so errors keep our
+  `{ "errors": [...] }` shape rather than Axum's. Batches are **all-or-nothing**:
+  every event is validated and, only if all pass, every event is recorded — so a
+  partial failure records nothing. Batch validation errors carry the offending
+  event's `index`; single-event errors omit it. The batch size is capped by
+  `MAX_BATCH_EVENTS` (config, default 1000), checked before validation; oversized
+  or empty batches are rejected with `400`. `record_accepted()` is the single
+  named seam for where an accepted event goes — today a structured `tracing`
+  event; durable storage or a broker slots in there (THA-17).
 
 ## Why "reference, not copy"
 

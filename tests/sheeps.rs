@@ -197,3 +197,243 @@ async fn duplicate_submission_is_accepted_twice() {
     assert_eq!(first.status(), StatusCode::ACCEPTED);
     assert_eq!(second.status(), StatusCode::ACCEPTED);
 }
+
+// ---------------------------------------------------------------------------
+// Batch ingestion (`application/cloudevents-batch+json`)
+// ---------------------------------------------------------------------------
+
+// --- Happy & contract ---
+
+#[tokio::test]
+async fn accepts_batch_of_valid_events() {
+    let app = TestApp::init();
+    let response = app
+        .post_cloudevent_batch(
+            "/api/v1/sheeps",
+            vec![valid_sheep(), valid_sheep(), valid_sheep()],
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert!(response.text().is_empty());
+}
+
+#[tokio::test]
+async fn accepts_single_element_batch() {
+    let app = TestApp::init();
+    let response = app
+        .post_cloudevent_batch("/api/v1/sheeps", vec![valid_sheep()])
+        .await;
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+}
+
+#[tokio::test]
+async fn duplicate_events_within_a_batch_are_both_accepted() {
+    // No dedup yet: identical events in one batch both succeed, mirroring the
+    // single-event contract.
+    let app = TestApp::init();
+    let response = app
+        .post_cloudevent_batch("/api/v1/sheeps", vec![valid_sheep(), valid_sheep()])
+        .await;
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+}
+
+// --- Adversarial shape ---
+
+#[tokio::test]
+async fn rejects_batch_body_that_is_not_an_array() {
+    // A bare object under the batch content type.
+    let app = TestApp::init();
+    let response = app
+        .post_raw(
+            "/api/v1/sheeps",
+            "application/cloudevents-batch+json",
+            serde_json::to_vec(&valid_sheep()).unwrap(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json: Value = response.json();
+    assert_eq!(
+        json["errors"][0]["detail"],
+        "batch body must be a JSON array"
+    );
+}
+
+#[tokio::test]
+async fn rejects_array_sent_to_single_content_type() {
+    // An array sent to the SINGLE content type: the single validator sees a
+    // non-object and rejects it — a clear 400, not a 500.
+    let app = TestApp::init();
+    let response = app
+        .post_raw(
+            "/api/v1/sheeps",
+            "application/cloudevents+json",
+            serde_json::to_vec(&json!([valid_sheep()])).unwrap(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json: Value = response.json();
+    assert_eq!(json["errors"][0]["detail"], "body must be a JSON object");
+}
+
+#[tokio::test]
+async fn rejects_non_object_elements_with_their_index() {
+    let app = TestApp::init();
+    let response = app
+        .post_cloudevent_batch(
+            "/api/v1/sheeps",
+            vec![valid_sheep(), json!(42), json!(null)],
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json: Value = response.json();
+    let errors = json["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|e| e["index"] == 1 && e["detail"] == "body must be a JSON object"),
+        "expected index 1 non-object error, got {errors:?}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| e["index"] == 2 && e["detail"] == "body must be a JSON object"),
+        "expected index 2 non-object error, got {errors:?}"
+    );
+}
+
+#[tokio::test]
+async fn rejects_invalid_json_under_batch_content_type() {
+    let app = TestApp::init();
+    let response = app
+        .post_raw(
+            "/api/v1/sheeps",
+            "application/cloudevents-batch+json",
+            b"[{not json".to_vec(),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json: Value = response.json();
+    assert_eq!(json["errors"][0]["detail"], "body must be valid JSON");
+}
+
+// --- Index & cross-products ---
+
+#[tokio::test]
+async fn scattered_invalid_events_report_correct_indices() {
+    let app = TestApp::init();
+    let mut bad = valid_sheep();
+    bad.as_object_mut().unwrap().remove("id");
+
+    let response = app
+        .post_cloudevent_batch("/api/v1/sheeps", vec![bad.clone(), valid_sheep(), bad])
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json: Value = response.json();
+    let errors = json["errors"].as_array().unwrap();
+
+    // Indices 0 and 2 failed (missing id); index 1 is valid and never appears.
+    assert!(
+        errors
+            .iter()
+            .any(|e| e["index"] == 0 && e["detail"] == "id is required")
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| e["index"] == 2 && e["detail"] == "id is required")
+    );
+    assert!(
+        errors.iter().all(|e| e["index"] != 1),
+        "the valid event at index 1 must not appear, got {errors:?}"
+    );
+}
+
+#[tokio::test]
+async fn collects_every_error_across_events_with_indices() {
+    // A 3-error event (index 0) next to a 2-error event (index 1) => 5 errors,
+    // each correctly indexed: per-event all-at-once times across-batch.
+    let app = TestApp::init();
+    let three_errors = json!({ "specversion": "1.0" }); // missing id, source, type
+    let two_errors = json!({ "specversion": "1.0", "type": "usage.created" }); // missing id, source
+
+    let response = app
+        .post_cloudevent_batch("/api/v1/sheeps", vec![three_errors, two_errors])
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json: Value = response.json();
+    let errors = json["errors"].as_array().unwrap();
+
+    assert_eq!(errors.len(), 5, "expected 5 errors, got {errors:?}");
+    assert_eq!(errors.iter().filter(|e| e["index"] == 0).count(), 3);
+    assert_eq!(errors.iter().filter(|e| e["index"] == 1).count(), 2);
+}
+
+// --- Boundaries & resource safety ---
+
+#[tokio::test]
+async fn rejects_empty_batch() {
+    let app = TestApp::init();
+    let response = app.post_cloudevent_batch("/api/v1/sheeps", vec![]).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json: Value = response.json();
+    assert_eq!(
+        json["errors"][0]["detail"],
+        "batch must contain at least one event"
+    );
+}
+
+#[tokio::test]
+async fn accepts_batch_exactly_at_the_cap() {
+    let app = TestApp::with_max_batch_events(3);
+    let response = app
+        .post_cloudevent_batch(
+            "/api/v1/sheeps",
+            vec![valid_sheep(), valid_sheep(), valid_sheep()],
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+}
+
+#[tokio::test]
+async fn rejects_batch_one_over_the_cap() {
+    let app = TestApp::with_max_batch_events(3);
+    let response = app
+        .post_cloudevent_batch(
+            "/api/v1/sheeps",
+            vec![valid_sheep(), valid_sheep(), valid_sheep(), valid_sheep()],
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json: Value = response.json();
+    assert_eq!(
+        json["errors"][0]["detail"],
+        "batch has 4 events, but the maximum is 3"
+    );
+}
+
+#[tokio::test]
+async fn cap_is_checked_before_validation() {
+    // An over-cap batch whose events are ALSO all invalid must report the cap
+    // error, not validation errors — proving the cap short-circuits before we
+    // spend work validating events.
+    let app = TestApp::with_max_batch_events(2);
+    let invalid = json!({ "specversion": "1.0" }); // missing id, source, type
+    let response = app
+        .post_cloudevent_batch(
+            "/api/v1/sheeps",
+            vec![invalid.clone(), invalid.clone(), invalid],
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json: Value = response.json();
+    let errors = json["errors"].as_array().unwrap();
+    assert_eq!(
+        errors.len(),
+        1,
+        "expected only the cap error, got {errors:?}"
+    );
+    assert_eq!(
+        errors[0]["detail"],
+        "batch has 3 events, but the maximum is 2"
+    );
+}

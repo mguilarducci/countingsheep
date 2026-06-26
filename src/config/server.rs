@@ -5,9 +5,14 @@ use std::net::IpAddr;
 use anyhow::Context;
 use countingsheep_env_vars::var;
 
+/// Default ceiling on events per batch when `MAX_BATCH_EVENTS` is unset.
+const DEFAULT_MAX_BATCH_EVENTS: usize = 1000;
+
 pub struct Server {
     pub ip: IpAddr,
     pub port: u16,
+    /// Maximum number of events accepted in a single batch submission.
+    pub max_batch_events: usize,
 }
 
 impl Server {
@@ -27,7 +32,16 @@ impl Server {
             None => 8888,
         };
 
-        Ok(Server { ip, port })
+        let max_batch_events = match var("MAX_BATCH_EVENTS")? {
+            Some(raw) => parse_max_batch_events(&raw)?,
+            None => DEFAULT_MAX_BATCH_EVENTS,
+        };
+
+        Ok(Server {
+            ip,
+            port,
+            max_batch_events,
+        })
     }
 
     fn bind_ip(expose_externally: bool) -> IpAddr {
@@ -42,6 +56,19 @@ impl Server {
 /// Parses the `PORT` value, with an error message that names the fix.
 fn parse_port(raw: &str) -> anyhow::Result<u16> {
     raw.parse().context("PORT must be a valid port number")
+}
+
+/// Parses the `MAX_BATCH_EVENTS` value. A cap below `1` would reject every
+/// batch (a batch must hold at least one event), so it is rejected as a
+/// misconfiguration rather than silently disabling ingestion.
+fn parse_max_batch_events(raw: &str) -> anyhow::Result<usize> {
+    let value: usize = raw
+        .parse()
+        .context("MAX_BATCH_EVENTS must be a non-negative integer")?;
+    if value < 1 {
+        anyhow::bail!("MAX_BATCH_EVENTS must be at least 1");
+    }
+    Ok(value)
 }
 
 #[cfg(test)]
@@ -77,5 +104,30 @@ mod tests {
     #[test]
     fn parse_port_rejects_non_numeric() {
         assert!(parse_port("eighty").is_err());
+    }
+
+    #[test]
+    fn parse_max_batch_events_accepts_valid() {
+        assert_eq!(parse_max_batch_events("500").unwrap(), 500);
+    }
+
+    #[test]
+    fn parse_max_batch_events_rejects_zero_with_actionable_message() {
+        let error = parse_max_batch_events("0").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("MAX_BATCH_EVENTS must be at least 1")
+        );
+    }
+
+    #[test]
+    fn parse_max_batch_events_rejects_non_numeric() {
+        assert!(parse_max_batch_events("lots").is_err());
+    }
+
+    #[test]
+    fn default_max_batch_events_is_1000() {
+        assert_eq!(DEFAULT_MAX_BATCH_EVENTS, 1000);
     }
 }

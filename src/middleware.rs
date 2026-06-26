@@ -50,6 +50,7 @@ mod tests {
         let config = Server {
             ip: [127, 0, 0, 1].into(),
             port: 0,
+            max_batch_events: 1000,
         };
         let app = Arc::new(App::builder().config(Arc::new(config)).build());
         let handler = build_handler(app);
