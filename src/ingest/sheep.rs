@@ -89,6 +89,56 @@ fn optional_uri(obj: &Map<String, Value>, key: &str, errors: &mut Vec<String>) -
     }
 }
 
+/// True for an RFC 2046 media type: `type "/" subtype` optionally followed by
+/// `;`-separated parameters (which are not inspected). Both `type` and
+/// `subtype` must be non-empty RFC 2045 tokens — printable ASCII excluding
+/// space, control characters, and `tspecials` (`()<>@,;:\"/[]?=`).
+fn is_media_type(s: &str) -> bool {
+    let essence = s.split(';').next().unwrap_or(s).trim();
+    let Some((kind, subtype)) = essence.split_once('/') else {
+        return false;
+    };
+    let is_token = |part: &str| {
+        !part.is_empty()
+            && part.chars().all(|c| {
+                c.is_ascii_graphic()
+                    && !matches!(
+                        c,
+                        '(' | ')'
+                            | '<'
+                            | '>'
+                            | '@'
+                            | ','
+                            | ';'
+                            | ':'
+                            | '\\'
+                            | '"'
+                            | '/'
+                            | '['
+                            | ']'
+                            | '?'
+                            | '='
+                    )
+            })
+    };
+    is_token(kind) && is_token(subtype)
+}
+
+/// If present and non-null, must be a non-empty RFC 2046 media type.
+fn optional_media_type(
+    obj: &Map<String, Value>,
+    key: &str,
+    errors: &mut Vec<String>,
+) -> Option<String> {
+    let value = optional_string(obj, key, errors)?;
+    if is_media_type(&value) {
+        Some(value)
+    } else {
+        errors.push(format!("{key} must be a media type"));
+        None
+    }
+}
+
 /// Validate a raw JSON value against the CloudEvents v1.0.2 contract.
 /// Collects *all* failures rather than stopping at the first.
 pub(crate) fn validate(value: Value) -> Result<Sheep, Vec<String>> {
@@ -109,7 +159,7 @@ pub(crate) fn validate(value: Value) -> Result<Sheep, Vec<String>> {
     }
 
     let subject = optional_string(obj, "subject", &mut errors);
-    let datacontenttype = optional_string(obj, "datacontenttype", &mut errors);
+    let datacontenttype = optional_media_type(obj, "datacontenttype", &mut errors);
     let dataschema = optional_uri(obj, "dataschema", &mut errors);
 
     let time = optional_string(obj, "time", &mut errors);
@@ -255,6 +305,38 @@ mod tests {
                     .any(|e| e.contains("dataschema") && e.contains("URI")),
                 "{bad:?} should be rejected as a non-URI, got {errs:?}"
             );
+        }
+    }
+
+    #[test]
+    fn datacontenttype_must_be_media_type_when_present() {
+        // CloudEvents v1.0.2 types `datacontenttype` as an RFC 2046 media type:
+        // `type/subtype`. A non-empty string that is not shaped as a media type
+        // (no slash, a bare word, or whitespace in a token) must be rejected.
+        for bad in ["garbage value", "application", "/json", "application/"] {
+            let mut v = valid();
+            v["datacontenttype"] = json!(bad);
+            let errs = validate(v).unwrap_err();
+            assert!(
+                errs.iter()
+                    .any(|e| e.contains("datacontenttype") && e.contains("media type")),
+                "{bad:?} should be rejected as a non-media-type, got {errs:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn datacontenttype_accepts_varied_media_types() {
+        // type/subtype, with optional parameters, must pass.
+        for good in [
+            "application/json",
+            "text/plain; charset=utf-8",
+            "application/cloudevents+json",
+            "application/vnd.api+json",
+        ] {
+            let mut v = valid();
+            v["datacontenttype"] = json!(good);
+            assert!(validate(v).is_ok(), "{good:?} should be accepted");
         }
     }
 
