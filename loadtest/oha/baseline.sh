@@ -25,14 +25,14 @@ fi
 
 single_body='{"id":"baseline-1","source":"/loadtest","type":"usage.created","specversion":"1.0"}'
 
-# Build a batch body of BATCH_SIZE identical valid events.
-batch_body="$(python3 - "$BATCH_SIZE" <<'PY'
-import json, sys
-n = int(sys.argv[1])
-event = {"id": "baseline-1", "source": "/loadtest", "type": "usage.created", "specversion": "1.0"}
-print(json.dumps([event] * n))
-PY
-)"
+# Build a batch body of BATCH_SIZE identical valid events. Pure shell so the
+# script carries no dependency beyond oha (events are identical, so this is just
+# the single body repeated inside a JSON array).
+batch_body="[${single_body}"
+for ((i = 2; i <= BATCH_SIZE; i++)); do
+  batch_body+=",${single_body}"
+done
+batch_body+="]"
 
 echo "== oha baseline =="
 echo "target:    $URL"

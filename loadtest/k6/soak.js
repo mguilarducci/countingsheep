@@ -28,6 +28,7 @@ export const options = {
   },
   thresholds: {
     http_req_failed: ['rate<0.001'],
+    dropped_iterations: ['count<1'], // steady moderate load should never outrun the server
     // Latency should stay flat across the whole run; a rising p99 is the drift
     // signal soak exists to catch.
     http_req_duration: ['p(99)<25'],

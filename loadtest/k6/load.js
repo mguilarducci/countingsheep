@@ -41,6 +41,7 @@ export const options = {
   },
   thresholds: {
     http_req_failed: ['rate<0.001'], // server-side errors are real failures
+    dropped_iterations: ['count<1'], // a drop = load we never delivered (saturation), not just a slow request
     'http_req_duration{scenario:single}': ['p(95)<5', 'p(99)<15'],
     'http_req_duration{scenario:batch}': ['p(95)<25'],
   },
