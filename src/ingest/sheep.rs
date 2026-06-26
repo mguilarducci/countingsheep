@@ -42,7 +42,10 @@ fn required_string(
     }
 }
 
-/// If present and non-null, must be a string.
+/// If present and non-null, must be a non-empty string. Per CloudEvents
+/// v1.0.2, the optional string attributes carried here (`subject`,
+/// `datacontenttype`, `dataschema`) MUST be non-empty when present — a
+/// present-but-empty optional is malformed, not absent.
 fn optional_string(
     obj: &Map<String, Value>,
     key: &str,
@@ -50,7 +53,11 @@ fn optional_string(
 ) -> Option<String> {
     match obj.get(key) {
         None | Some(Value::Null) => None,
-        Some(Value::String(s)) => Some(s.clone()),
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            errors.push(format!("{key} must not be empty"));
+            None
+        }
         Some(_) => {
             errors.push(format!("{key} must be a string"));
             None
@@ -173,6 +180,30 @@ mod tests {
                 .iter()
                 .any(|e| e.contains("RFC 3339"))
         );
+    }
+
+    #[test]
+    fn rejects_empty_optional_attributes() {
+        // CloudEvents v1.0.2: subject and dataschema MUST be a non-empty
+        // string/URI when present; datacontenttype must be a valid RFC 2046
+        // media type (an empty string is not). A present-but-empty optional is
+        // malformed, not absent.
+        for key in ["subject", "dataschema", "datacontenttype"] {
+            let mut v = valid();
+            v[key] = json!("");
+            let errs = validate(v).unwrap_err();
+            assert!(
+                errs.iter().any(|e| e.contains(key) && e.contains("empty")),
+                "empty {key} should be rejected as non-empty, got {errs:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn absent_optional_attributes_are_accepted() {
+        // Optional governs presence: absent is fine (no error), unlike a
+        // present-but-empty value.
+        assert!(validate(valid()).is_ok());
     }
 
     #[test]

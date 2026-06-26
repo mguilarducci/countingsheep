@@ -42,6 +42,23 @@ async fn rejects_empty_required_field() {
 }
 
 #[tokio::test]
+async fn rejects_empty_optional_attribute() {
+    // CloudEvents v1.0.2: an optional attribute that is present MUST still
+    // satisfy its value constraint — `subject` MUST be a non-empty string.
+    // Prove the validate() branch propagates through the full HTTP wire path
+    // into our consistent {errors:[{detail}]} shape.
+    let app = TestApp::init();
+    let mut body = valid_sheep();
+    body["subject"] = json!("");
+
+    let response = app.post_cloudevent("/api/v1/sheeps", body).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let json: Value = response.json();
+    assert_eq!(json["errors"][0]["detail"], "subject must not be empty");
+}
+
+#[tokio::test]
 async fn rejects_bad_specversion() {
     let app = TestApp::init();
     let mut body = valid_sheep();
