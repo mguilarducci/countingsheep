@@ -1,0 +1,11 @@
+# no-mistakes per-repo configuration
+# Commands the pipeline runs to validate changes before they reach the push
+# target. Mirrors the Justfile, but inlined with raw `cargo` so the gate works
+# in environments where `just` is not installed.
+commands:
+  # Auto-format the working tree (format step).
+  format: cargo fmt --all
+  # Verify lints with warnings treated as errors (lint step).
+  lint: cargo clippy --all-targets --all-features --workspace -- -D warnings
+  # Run the full workspace test suite (test step).
+  test: cargo nextest run --workspace --no-tests=pass
