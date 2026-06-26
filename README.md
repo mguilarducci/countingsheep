@@ -28,4 +28,5 @@ just check    # fmt + clippy + tests (what CI runs)
 
 Requires the toolchain pinned in `rust-toolchain.toml`, plus
 [`just`](https://github.com/casey/just) and
-[`cargo-nextest`](https://nexte.st/).
+[`cargo-nextest`](https://nexte.st/). Prefer a container? Open the repo in the
+[dev container](.devcontainer) for a preconfigured, CI-parity toolchain.
