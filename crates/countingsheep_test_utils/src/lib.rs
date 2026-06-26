@@ -15,19 +15,30 @@ use http_body_util::BodyExt;
 use serde::de::DeserializeOwned;
 use tower::ServiceExt;
 
+/// Default batch cap for the harness, mirroring the production default so
+/// `init()` exercises realistic behavior.
+const DEFAULT_TEST_MAX_BATCH_EVENTS: usize = 1000;
+
 /// A booted application, ready to accept requests in-process (no socket).
 pub struct TestApp {
     router: Router,
 }
 
 impl TestApp {
-    /// Boots app in `Test` environment using real `build_handler`.
+    /// Boots the app with the default batch cap (matching production).
     pub fn init() -> Self {
+        Self::with_max_batch_events(DEFAULT_TEST_MAX_BATCH_EVENTS)
+    }
+
+    /// Boots the app with a custom batch cap, so oversize-batch tests can trip
+    /// the limit with a handful of events instead of building a thousand.
+    pub fn with_max_batch_events(max_batch_events: usize) -> Self {
         countingsheep::util::tracing::init_for_test();
 
         let config = Server {
             ip: [127, 0, 0, 1].into(),
             port: 0,
+            max_batch_events,
         };
         let app = Arc::new(App::builder().config(Arc::new(config)).build());
         let router = build_handler(app);
@@ -85,6 +96,20 @@ impl TestApp {
             path,
             "application/cloudevents+json",
             serde_json::to_vec(&json).unwrap(),
+        )
+        .await
+    }
+
+    /// Sends a POST as `application/cloudevents-batch+json` from an event array.
+    pub async fn post_cloudevent_batch(
+        &self,
+        path: &str,
+        events: Vec<serde_json::Value>,
+    ) -> TestResponse {
+        self.post_raw(
+            path,
+            "application/cloudevents-batch+json",
+            serde_json::to_vec(&events).unwrap(),
         )
         .await
     }

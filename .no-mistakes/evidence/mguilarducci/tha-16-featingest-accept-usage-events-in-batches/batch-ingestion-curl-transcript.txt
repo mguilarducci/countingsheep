@@ -1,0 +1,64 @@
+THA-16 — Batch usage-event ingestion: live end-to-end HTTP transcript
+Server: ./target/debug/server  PORT=8911  MAX_BATCH_EVENTS=3  (real binary, real TCP socket)
+Endpoint: POST /api/v1/sheeps
+Date: 2026-06-26
+======================================================================
+
+### 1. Single CloudEvent (THA-15 path unchanged) -> 202, no index in any future error
+$ curl -X POST http://127.0.0.1:8911/api/v1/sheeps -H "Content-Type: application/cloudevents+json" \
+    -d '{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"}'
+> 
+> HTTP 202
+
+### 2. Batch of 3 valid events, exactly at cap -> 202, empty body
+$ curl -X POST http://127.0.0.1:8911/api/v1/sheeps -H "Content-Type: application/cloudevents-batch+json" \
+    -d '[{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"},{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"},{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"}]'
+> 
+> HTTP 202
+
+### 3. Empty batch rejected -> 400
+$ curl -X POST http://127.0.0.1:8911/api/v1/sheeps -H "Content-Type: application/cloudevents-batch+json" \
+    -d '[]'
+> {"errors":[{"detail":"batch must contain at least one event"}]}
+> HTTP 400
+
+### 4. Oversize batch (4 > cap 3) -> 400, cap from MAX_BATCH_EVENTS env
+$ curl -X POST http://127.0.0.1:8911/api/v1/sheeps -H "Content-Type: application/cloudevents-batch+json" \
+    -d '[{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"},{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"},{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"},{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"}]'
+> {"errors":[{"detail":"batch has 4 events, but the maximum is 3"}]}
+> HTTP 400
+
+### 5. All-or-nothing + per-event index: [bad, valid, bad] -> 400, indices 0 & 2 (valid index 1 absent)
+$ curl -X POST http://127.0.0.1:8911/api/v1/sheeps -H "Content-Type: application/cloudevents-batch+json" \
+    -d '[{"specversion":"1.0","source":"/meter/cpu","type":"usage.created"},{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"},{"specversion":"1.0","source":"/meter/cpu","type":"usage.created"}]'
+> {"errors":[{"detail":"id is required","index":0},{"detail":"id is required","index":2}]}
+> HTTP 400
+
+### 6. Every error collected per event: idx0 missing 3 fields, idx1 missing 2 -> 5 indexed errors
+$ curl -X POST http://127.0.0.1:8911/api/v1/sheeps -H "Content-Type: application/cloudevents-batch+json" \
+    -d '[{"specversion":"1.0"},{"specversion":"1.0","type":"usage.created"}]'
+> {"errors":[{"detail":"id is required","index":0},{"detail":"source is required","index":0},{"detail":"type is required","index":0},{"detail":"id is required","index":1},{"detail":"source is required","index":1}]}
+> HTTP 400
+
+### 7. Non-array body under batch content-type -> 400
+$ curl -X POST http://127.0.0.1:8911/api/v1/sheeps -H "Content-Type: application/cloudevents-batch+json" \
+    -d '{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"}'
+> {"errors":[{"detail":"batch body must be a JSON array"}]}
+> HTTP 400
+
+### 8. Cap enforced BEFORE validation: 4 invalid events, cap 3 -> single cap error only
+$ curl -X POST http://127.0.0.1:8911/api/v1/sheeps -H "Content-Type: application/cloudevents-batch+json" \
+    -d '[{"specversion":"1.0"},{"specversion":"1.0"},{"specversion":"1.0"},{"specversion":"1.0"}]'
+> {"errors":[{"detail":"batch has 4 events, but the maximum is 3"}]}
+> HTTP 400
+
+### 9. Array sent to SINGLE content-type -> 400 (validator rejects non-object), not a 500
+$ curl -X POST http://127.0.0.1:8911/api/v1/sheeps -H "Content-Type: application/cloudevents+json" \
+    -d '[{"specversion":"1.0","id":"a1","source":"/meter/cpu","type":"usage.created","time":"2026-06-26T12:00:00Z"}]'
+> {"errors":[{"detail":"body must be a JSON object"}]}
+> HTTP 400
+
+======================================================================
+Atomicity side-effect (server 'sheep accepted' log = the record_accepted seam):
+  - All-valid 2-event batch -> BOTH ids logged as accepted.
+  - Mixed [bad, GOOD-IN-MIXED-BATCH] batch -> 400, ZERO ids logged (partial failure records nothing).
