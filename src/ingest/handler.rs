@@ -4,11 +4,13 @@ use axum::body::Bytes;
 use axum::http::header::CONTENT_TYPE;
 use axum::http::{HeaderMap, StatusCode};
 use serde_json::Value;
+use time::OffsetDateTime;
 use tracing::info;
 
 use crate::app::AppState;
 use crate::error::{AppError, AppResult, ValidationItem};
-use crate::ingest::sheep::{Sheep, validate};
+use crate::ingest::sheep::validate;
+use crate::ingest::stamp::{AcceptedSheep, stamp};
 
 const CLOUDEVENTS_JSON: &str = "application/cloudevents+json";
 const CLOUDEVENTS_BATCH_JSON: &str = "application/cloudevents-batch+json";
@@ -46,7 +48,10 @@ pub(crate) async fn create_sheep(
 fn ingest_single(body: &Bytes) -> AppResult<StatusCode> {
     let value = parse_json(body)?;
     let sheep = validate(value).map_err(AppError::validation)?;
-    record_accepted(&sheep);
+    // The one place the clock is read for a single event: stamp `occurred_at`
+    // (defaulting a missing time to now) and `received_at` at the edge.
+    let accepted = stamp(sheep, OffsetDateTime::now_utc());
+    record_accepted(&accepted);
     Ok(StatusCode::ACCEPTED)
 }
 
@@ -91,8 +96,11 @@ fn ingest_batch(body: &Bytes, max_batch_events: usize) -> AppResult<StatusCode> 
         return Err(AppError::Validation(errors));
     }
 
-    for sheep in &accepted {
-        record_accepted(sheep);
+    // Read the clock once for the whole batch, then stamp every event with the
+    // same `received_at` at the ingestion edge.
+    let now = OffsetDateTime::now_utc();
+    for sheep in accepted {
+        record_accepted(&stamp(sheep, now));
     }
     Ok(StatusCode::ACCEPTED)
 }
@@ -103,13 +111,17 @@ fn parse_json(body: &Bytes) -> AppResult<Value> {
         .map_err(|_| AppError::BadRequest("body must be valid JSON".to_string()))
 }
 
-/// The seam: where an accepted sheep goes. Today, a structured tracing event.
-/// Durable storage / a broker would replace the body here later.
-fn record_accepted(sheep: &Sheep) {
+/// The seam: where an accepted sheep goes. Today, a structured tracing event
+/// carrying both timestamps. Durable storage / a broker would replace the body
+/// here later.
+fn record_accepted(accepted: &AcceptedSheep) {
+    let sheep = &accepted.sheep;
     info!(
         id = %sheep.id,
         source = %sheep.source,
         event_type = %sheep.r#type,
+        occurred_at = %accepted.occurred_at,
+        received_at = %accepted.received_at,
         "sheep accepted"
     );
 }
@@ -117,27 +129,70 @@ fn record_accepted(sheep: &Sheep) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tracing_test::traced_test;
+    use crate::ingest::sheep::Sheep;
+    use crate::ingest::stamp::stamp;
+    use std::sync::{Arc, Mutex};
+    use time::macros::datetime;
+    use tracing::subscriber::with_default;
+    use tracing_subscriber::fmt::MakeWriter;
 
-    fn sample() -> Sheep {
+    fn sample_sheep() -> Sheep {
         Sheep {
             id: "a-1".into(),
             source: "/svc".into(),
             r#type: "usage.created".into(),
             specversion: "1.0".into(),
             subject: None,
-            time: None,
+            time: Some(datetime!(2026-06-20 08:30:00 UTC)),
             data: None,
             datacontenttype: None,
             dataschema: None,
         }
     }
 
-    #[traced_test]
+    /// Appends every emitted log line into a shared buffer. Capturing through a
+    /// test-local subscriber (installed only for the current thread via
+    /// `with_default`) keeps this test deterministic: it never races the global
+    /// subscriber that other tests install, unlike `tracing-test`'s shared
+    /// capture.
+    #[derive(Clone, Default)]
+    struct CaptureWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl std::io::Write for CaptureWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for CaptureWriter {
+        type Writer = CaptureWriter;
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
     #[test]
-    fn record_accepted_emits_observable_event() {
-        record_accepted(&sample());
-        assert!(logs_contain("sheep accepted"));
-        assert!(logs_contain("a-1")); // the sheep's id reaches the log
+    fn record_accepted_logs_both_stamps() {
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .with_writer(CaptureWriter(Arc::clone(&buffer)))
+            .finish();
+
+        with_default(subscriber, || {
+            let accepted = stamp(sample_sheep(), datetime!(2026-06-26 10:00:00 UTC));
+            record_accepted(&accepted);
+        });
+
+        let logs = String::from_utf8(buffer.lock().unwrap().clone()).unwrap();
+        assert!(logs.contains("sheep accepted"));
+        assert!(logs.contains("a-1")); // the sheep's id reaches the log
+        assert!(logs.contains("occurred_at")); // when it happened
+        assert!(logs.contains("received_at")); // when we received it
     }
 }

@@ -3,3 +3,4 @@
 
 pub(crate) mod handler;
 pub(crate) mod sheep;
+pub(crate) mod stamp;
