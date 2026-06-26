@@ -29,6 +29,47 @@ async fn rejects_missing_required_field() {
 }
 
 #[tokio::test]
+async fn rejects_empty_required_field() {
+    let app = TestApp::init();
+    let mut body = valid_sheep();
+    body["id"] = json!("");
+
+    let response = app.post_cloudevent("/api/v1/sheeps", body).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let json: Value = response.json();
+    assert_eq!(json["errors"][0]["detail"], "id must not be empty");
+}
+
+#[tokio::test]
+async fn rejects_bad_specversion() {
+    let app = TestApp::init();
+    let mut body = valid_sheep();
+    body["specversion"] = json!("0.3");
+
+    let response = app.post_cloudevent("/api/v1/sheeps", body).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let json: Value = response.json();
+    let detail = json["errors"][0]["detail"].as_str().unwrap();
+    assert!(detail.contains("specversion"), "detail was {detail:?}");
+}
+
+#[tokio::test]
+async fn rejects_bad_time() {
+    let app = TestApp::init();
+    let mut body = valid_sheep();
+    body["time"] = json!("not-a-date");
+
+    let response = app.post_cloudevent("/api/v1/sheeps", body).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let json: Value = response.json();
+    let detail = json["errors"][0]["detail"].as_str().unwrap();
+    assert!(detail.contains("RFC 3339"), "detail was {detail:?}");
+}
+
+#[tokio::test]
 async fn reports_multiple_errors_at_once() {
     let app = TestApp::init();
     let response = app
