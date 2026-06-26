@@ -6,12 +6,13 @@
 FROM mcr.microsoft.com/devcontainers/rust:1-bookworm
 
 # Pin the toolchain to match rust-toolchain.toml and install its components.
-# Copying the manifest first makes `rustup show` resolve + download exactly the
-# pinned channel at build time, and `rustup component add` attaches rustfmt and
-# clippy to *that* toolchain — so no repo-config edit is required.
+# Copying the manifest first lets `rustup toolchain install` (no args) read the
+# override file and download exactly the pinned channel, and `rustup component
+# add` attaches rustfmt and clippy to *that* toolchain — so no repo-config edit
+# is required.
 COPY rust-toolchain.toml /tmp/rust-toolchain.toml
 RUN cd /tmp \
-    && rustup show \
+    && rustup toolchain install \
     && rustup component add rustfmt clippy \
     && rm -f /tmp/rust-toolchain.toml
 
