@@ -12,10 +12,10 @@
 //! # Safety by default
 //!
 //! - Unconfigured (no key) or kill-switched (`POSTHOG_ENABLED=false`) ⇒ a
-//!   [`NoopSink`]; the app runs normally and sends nothing.
+//!   `NoopSink`; the app runs normally and sends nothing.
 //! - Delivery is fire-and-forget via `posthog-rs`'s background worker, so the
 //!   request path never blocks on or fails because of PostHog.
-//! - A sink that panics is caught ([`dispatch`]) so it can never unwind into
+//! - A sink that panics is caught (`dispatch`) so it can never unwind into
 //!   request handling.
 //! - Logs remain the source of truth: enabling/disabling and every failure are
 //!   logged, independently of whether PostHog is reachable.
