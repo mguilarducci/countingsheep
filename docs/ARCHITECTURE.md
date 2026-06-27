@@ -7,7 +7,7 @@ reusable, app-agnostic capabilities live in workspace crates under `crates/`.
 
 | Crate | Responsibility |
 | --- | --- |
-| `countingsheep` (root) | App state, router, middleware wiring, error type, config, binary, usage-event ingestion (`src/ingest/`) |
+| `countingsheep` (root) | App state, router, middleware wiring, error type, config, binary, usage-event ingestion (`src/ingest/`), error tracking (`src/observability/`) |
 | `countingsheep_env_vars` | `dotenvy`-backed env-var helpers |
 | `countingsheep_test_utils` | In-process `TestApp` harness for integration tests |
 
@@ -65,5 +65,7 @@ dev-dependency.
 ## Why "reference, not copy"
 
 The structure mirrors crates.io's seams and crate split, but deliberately omits
-its database, auth, sessions, rate-limiting, metrics, and Sentry — those are
-added per-app.
+its database, auth, sessions, rate-limiting, and metrics — those are added
+per-app. Error tracking (crates.io's Sentry slot) is the exception: a thin,
+safe-by-default PostHog integration is built in — see the Observability seam
+above.
