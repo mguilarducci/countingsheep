@@ -33,8 +33,12 @@ use crate::config::PostHogConfig;
 const SERVICE_DISTINCT_ID: &str = "countingsheep-backend";
 
 /// A normalized exception ready to report.
+///
+/// Crate-internal: it is built and consumed entirely within this crate (by
+/// `error.rs` and the reporting functions below). The binary only touches
+/// [`init`]/[`shutdown`], so this type never needs to cross the crate boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExceptionReport {
+pub(crate) struct ExceptionReport {
     /// Becomes `$exception_list[].type` — e.g. `"AppError::Internal"` or
     /// `"panic"`.
     pub kind: String,
@@ -129,14 +133,14 @@ pub async fn shutdown() {
 }
 
 /// Report an exception through the global sink. A no-op until [`init`] has run.
-pub fn report_exception(report: ExceptionReport) {
+pub(crate) fn report_exception(report: ExceptionReport) {
     if let Some(sink) = SINK.get() {
         dispatch(sink.as_ref(), report);
     }
 }
 
 /// Capture a panic message (handled = false).
-pub fn report_panic(message: String) {
+pub(crate) fn report_panic(message: String) {
     report_exception(panic_report(message));
 }
 
@@ -152,7 +156,7 @@ fn dispatch(sink: &dyn ExceptionSink, report: ExceptionReport) {
 
 /// The exception report for a 5xx server fault, carrying the full `anyhow`
 /// cause chain (outermost first) as the value.
-pub fn internal_report(error: &anyhow::Error) -> ExceptionReport {
+pub(crate) fn internal_report(error: &anyhow::Error) -> ExceptionReport {
     ExceptionReport {
         kind: "AppError::Internal".to_string(),
         // `{:#}` renders the full cause chain on one line, outermost first.
@@ -172,7 +176,7 @@ fn panic_report(message: String) -> ExceptionReport {
 
 /// Extract a human-readable message from a panic payload, tolerating the common
 /// `&str`/`String` shapes and anything else.
-pub fn panic_message(payload: &(dyn Any + Send)) -> String {
+pub(crate) fn panic_message(payload: &(dyn Any + Send)) -> String {
     if let Some(message) = payload.downcast_ref::<&str>() {
         (*message).to_string()
     } else if let Some(message) = payload.downcast_ref::<String>() {
