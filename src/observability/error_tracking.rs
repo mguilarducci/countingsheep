@@ -44,8 +44,12 @@ pub struct ExceptionReport {
     pub handled: bool,
 }
 
-/// Where reported exceptions go. This trait is the seam tests fake.
-pub trait ExceptionSink: Send + Sync {
+/// Where reported exceptions go — a crate-internal seam. It is deliberately not
+/// `pub`: there is no public installer ([`init`] is the only writer of `SINK`,
+/// and only ever from config), so nothing outside the crate can supply a sink.
+/// The only implementors are this module's `NoopSink`/`PosthogSink` and the
+/// tests that fake it.
+pub(crate) trait ExceptionSink: Send + Sync {
     /// Deliver one exception. Implementations must not block the caller.
     fn report(&self, report: ExceptionReport);
 }
