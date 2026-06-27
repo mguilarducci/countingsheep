@@ -1,11 +1,14 @@
 //! Configuration for the HTTP server.
 
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 
 use anyhow::Context;
 use countingsheep_env_vars::var;
 
 use crate::config::PostHogConfig;
+
+/// Default port to bind when `PORT` is unset.
+const DEFAULT_PORT: u16 = 8888;
 
 /// Default ceiling on events per batch when `MAX_BATCH_EVENTS` is unset.
 const DEFAULT_MAX_BATCH_EVENTS: usize = 1000;
@@ -36,7 +39,7 @@ impl Server {
 
         let port = match var("PORT")? {
             Some(raw) => parse_port(&raw)?,
-            None => 8888,
+            None => DEFAULT_PORT,
         };
 
         let max_batch_events = match var("MAX_BATCH_EVENTS")? {
@@ -56,9 +59,9 @@ impl Server {
 
     fn bind_ip(expose_externally: bool) -> IpAddr {
         if expose_externally {
-            [0, 0, 0, 0].into()
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED)
         } else {
-            [127, 0, 0, 1].into()
+            IpAddr::V4(Ipv4Addr::LOCALHOST)
         }
     }
 }
@@ -84,7 +87,6 @@ fn parse_max_batch_events(raw: &str) -> anyhow::Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv4Addr;
 
     #[test]
     fn exposed_binds_all_interfaces() {
