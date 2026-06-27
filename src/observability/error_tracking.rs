@@ -97,11 +97,17 @@ pub async fn init(config: &PostHogConfig) {
             }
         }
         None => {
-            let reason = config
-                .disabled_reason()
-                .map(|reason| reason.to_string())
-                .unwrap_or_default();
-            info!(%reason, "error tracking disabled");
+            match config.disabled_reason() {
+                // A malformed flag is operator error: still additive (capture
+                // stays off, the service runs), but loud enough to get noticed.
+                Some(reason) if reason.is_misconfiguration() => {
+                    warn!(reason = %reason, "error tracking disabled");
+                }
+                reason => {
+                    let reason = reason.map(|reason| reason.to_string()).unwrap_or_default();
+                    info!(%reason, "error tracking disabled");
+                }
+            }
             Box::new(NoopSink)
         }
     };

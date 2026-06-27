@@ -11,8 +11,22 @@ use countingsheep_env_vars::var;
 #[derive(Clone)]
 pub struct PostHogConfig {
     api_key: Option<String>,
-    enabled: bool,
+    enabled: Enablement,
     host: Option<String>,
+}
+
+/// Whether `POSTHOG_ENABLED` asked capture to run. A malformed value is its own
+/// state — kept distinct from an explicit `false` so it can never break startup
+/// yet still be logged truthfully as a misconfiguration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Enablement {
+    /// A truthy value (or the default when unset).
+    On,
+    /// An explicit falsey value — the operator's kill-switch.
+    Off,
+    /// An unparseable value; treated as disabled, carrying the raw input so the
+    /// startup log can name the exact misconfiguration.
+    Invalid(String),
 }
 
 /// The resolved settings for when error tracking should actually run.
@@ -25,12 +39,23 @@ pub struct ActivePostHog<'a> {
 }
 
 /// Why error tracking is not running, for an unambiguous startup log.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisabledReason {
     /// `POSTHOG_ENABLED=false` — the explicit kill-switch.
     Killswitch,
     /// `POSTHOG_API_KEY` is unset or blank.
     NoApiKey,
+    /// `POSTHOG_ENABLED` held an unparseable value; capture is off rather than
+    /// failing startup. Carries the raw value for an actionable log.
+    InvalidEnabledValue(String),
+}
+
+impl DisabledReason {
+    /// Whether this reason reflects operator misconfiguration (worth a `warn!`)
+    /// rather than an intentional, expected disable (an `info!`).
+    pub fn is_misconfiguration(&self) -> bool {
+        matches!(self, DisabledReason::InvalidEnabledValue(_))
+    }
 }
 
 impl fmt::Display for DisabledReason {
@@ -38,6 +63,11 @@ impl fmt::Display for DisabledReason {
         match self {
             DisabledReason::Killswitch => f.write_str("POSTHOG_ENABLED=false"),
             DisabledReason::NoApiKey => f.write_str("POSTHOG_API_KEY not set"),
+            DisabledReason::InvalidEnabledValue(raw) => write!(
+                f,
+                "POSTHOG_ENABLED must be one of true/false/1/0/yes/no/on/off, got {raw:?}; \
+                 treating error tracking as disabled"
+            ),
         }
     }
 }
@@ -49,7 +79,7 @@ impl Default for PostHogConfig {
     fn default() -> Self {
         Self {
             api_key: None,
-            enabled: true,
+            enabled: Enablement::On,
             host: None,
         }
     }
@@ -72,8 +102,8 @@ impl PostHogConfig {
     pub fn from_environment() -> anyhow::Result<Self> {
         let api_key = non_blank(var("POSTHOG_API_KEY")?);
         let enabled = match var("POSTHOG_ENABLED")? {
-            Some(raw) => parse_enabled(&raw)?,
-            None => true,
+            Some(raw) => parse_enabled(&raw),
+            None => Enablement::On,
         };
         let host = non_blank(var("POSTHOG_HOST")?);
 
@@ -88,7 +118,7 @@ impl PostHogConfig {
     /// present. `None` means error tracking is off — see
     /// [`PostHogConfig::disabled_reason`] for why.
     pub fn active(&self) -> Option<ActivePostHog<'_>> {
-        if !self.enabled {
+        if self.enabled != Enablement::On {
             return None;
         }
         let api_key = self.api_key.as_deref()?;
@@ -98,11 +128,16 @@ impl PostHogConfig {
         })
     }
 
-    /// Why capture is off, or `None` when it is active. The kill-switch takes
-    /// precedence over a missing key so the log names the operator's own action.
+    /// Why capture is off, or `None` when it is active. A disabling
+    /// `POSTHOG_ENABLED` value (explicit or malformed) takes precedence over a
+    /// missing key so the log names the operator's own action.
     pub fn disabled_reason(&self) -> Option<DisabledReason> {
-        if !self.enabled {
-            return Some(DisabledReason::Killswitch);
+        match &self.enabled {
+            Enablement::Off => return Some(DisabledReason::Killswitch),
+            Enablement::Invalid(raw) => {
+                return Some(DisabledReason::InvalidEnabledValue(raw.clone()));
+            }
+            Enablement::On => {}
         }
         if self.api_key.is_none() {
             return Some(DisabledReason::NoApiKey);
@@ -117,15 +152,13 @@ fn non_blank(value: Option<String>) -> Option<String> {
 }
 
 /// Parses `POSTHOG_ENABLED`. Accepts common truthy/falsey spellings; anything
-/// else is a misconfiguration with an actionable message rather than a silent
-/// default.
-fn parse_enabled(raw: &str) -> anyhow::Result<bool> {
+/// else resolves to [`Enablement::Invalid`] (treated as disabled and logged at
+/// startup) rather than aborting the service over an additive observability flag.
+fn parse_enabled(raw: &str) -> Enablement {
     match raw.trim().to_ascii_lowercase().as_str() {
-        "true" | "1" | "yes" | "on" => Ok(true),
-        "false" | "0" | "no" | "off" => Ok(false),
-        other => anyhow::bail!(
-            "POSTHOG_ENABLED must be one of true/false/1/0/yes/no/on/off, got {other:?}"
-        ),
+        "true" | "1" | "yes" | "on" => Enablement::On,
+        "false" | "0" | "no" | "off" => Enablement::Off,
+        _ => Enablement::Invalid(raw.to_string()),
     }
 }
 
@@ -137,7 +170,7 @@ mod tests {
     fn inactive_without_a_key() {
         let config = PostHogConfig {
             api_key: None,
-            enabled: true,
+            enabled: Enablement::On,
             host: None,
         };
         assert!(config.active().is_none());
@@ -148,7 +181,7 @@ mod tests {
     fn active_when_key_present_and_enabled() {
         let config = PostHogConfig {
             api_key: Some("phc_key".to_string()),
-            enabled: true,
+            enabled: Enablement::On,
             host: None,
         };
         let active = config.active().expect("should be active");
@@ -161,7 +194,7 @@ mod tests {
     fn killswitch_disables_even_with_a_key() {
         let config = PostHogConfig {
             api_key: Some("phc_key".to_string()),
-            enabled: false,
+            enabled: Enablement::Off,
             host: Some("https://eu.i.posthog.com".to_string()),
         };
         assert!(config.active().is_none());
@@ -172,7 +205,7 @@ mod tests {
     fn active_carries_the_host_when_set() {
         let config = PostHogConfig {
             api_key: Some("k".to_string()),
-            enabled: true,
+            enabled: Enablement::On,
             host: Some("https://eu.i.posthog.com".to_string()),
         };
         assert_eq!(
@@ -184,19 +217,47 @@ mod tests {
     #[test]
     fn parse_enabled_accepts_truthy_and_falsey_spellings() {
         for raw in ["true", "1", "YES", "On"] {
-            assert!(parse_enabled(raw).unwrap(), "{raw} should be truthy");
+            assert_eq!(parse_enabled(raw), Enablement::On, "{raw} should be truthy");
         }
         for raw in ["false", "0", "no", "OFF"] {
-            assert!(!parse_enabled(raw).unwrap(), "{raw} should be falsey");
+            assert_eq!(
+                parse_enabled(raw),
+                Enablement::Off,
+                "{raw} should be falsey"
+            );
         }
     }
 
     #[test]
-    fn parse_enabled_rejects_garbage_with_an_actionable_message() {
-        let error = parse_enabled("maybe").unwrap_err();
+    fn parse_enabled_treats_garbage_as_invalid_without_failing() {
+        assert_eq!(
+            parse_enabled("ture"),
+            Enablement::Invalid("ture".to_string()),
+            "an unparseable value must resolve to Invalid, not abort startup"
+        );
+    }
+
+    #[test]
+    fn garbage_enabled_disables_capture_with_an_actionable_reason() {
+        let config = PostHogConfig {
+            api_key: Some("phc_key".to_string()),
+            enabled: Enablement::Invalid("ture".to_string()),
+            host: None,
+        };
         assert!(
-            error.to_string().contains("POSTHOG_ENABLED must be"),
-            "message should name the fix, got: {error}"
+            config.active().is_none(),
+            "an unparseable flag must not enable third-party egress"
+        );
+        let reason = config.disabled_reason().expect("should be disabled");
+        assert_eq!(
+            reason,
+            DisabledReason::InvalidEnabledValue("ture".to_string())
+        );
+        assert!(reason.is_misconfiguration());
+        let rendered = reason.to_string();
+        assert!(
+            rendered.contains("POSTHOG_ENABLED must be") && rendered.contains("ture"),
+            "message should name the fix and the bad value, got: {rendered}"
         );
     }
 
@@ -212,7 +273,7 @@ mod tests {
     fn debug_redacts_the_api_key() {
         let config = PostHogConfig {
             api_key: Some("phc_supersecret".to_string()),
-            enabled: true,
+            enabled: Enablement::On,
             host: None,
         };
         let rendered = format!("{config:?}");
