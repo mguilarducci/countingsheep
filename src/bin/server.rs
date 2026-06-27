@@ -38,15 +38,24 @@ fn main() -> anyhow::Result<()> {
 
     // Block the main thread until the server has shut down.
     rt.block_on(async {
+        // Initialize error tracking inside the runtime (the PostHog client is
+        // built asynchronously). Safe by default: a no-op when unconfigured.
+        countingsheep::observability::error_tracking::init(&app.config.posthog).await;
+
         let listener = TcpListener::bind((app.config.ip, app.config.port)).await?;
 
         let addr = listener.local_addr()?;
         println!("Listening at http://{addr}");
 
         // Run the server with graceful shutdown.
-        axum::serve(listener, make_service)
+        let result = axum::serve(listener, make_service)
             .with_graceful_shutdown(shutdown_signal())
-            .await
+            .await;
+
+        // Drain any buffered exception events before the process exits.
+        countingsheep::observability::error_tracking::shutdown().await;
+
+        result
     })?;
 
     println!("Server has gracefully shut down!");

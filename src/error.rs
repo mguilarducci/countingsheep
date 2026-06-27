@@ -6,6 +6,8 @@ use axum::response::{IntoResponse, Response};
 use serde_json::json;
 use tracing::error;
 
+use crate::observability::error_tracking::{self, ExceptionReport};
+
 /// A single validation failure. `index` ties the failure to a position within
 /// a batch submission; it is `None` for single-event requests, which keeps the
 /// single-event response shape (`{ "detail": ... }`, no `index`) unchanged.
@@ -80,8 +82,29 @@ fn render_validation_item(item: ValidationItem) -> serde_json::Value {
     }
 }
 
+/// The PostHog exception report for an error, or `None` when it must not be
+/// tracked. Only `Internal` (5xx) is a server-side fault worth capturing; 4xx
+/// are expected client errors and tracking them would only bury real issues.
+fn exception_report(error: &AppError) -> Option<ExceptionReport> {
+    match error {
+        AppError::Internal(cause) => Some(error_tracking::internal_report(cause)),
+        AppError::BadRequest(_)
+        | AppError::Validation(_)
+        | AppError::UnsupportedMediaType(_)
+        | AppError::NotFound
+        | AppError::MethodNotAllowed => None,
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        // Capture server-side faults (5xx) to PostHog before rendering. This is
+        // additive: the `error!` log below remains the source of truth, and a
+        // no-op when error tracking is disabled.
+        if let Some(report) = exception_report(&self) {
+            error_tracking::report_exception(report);
+        }
+
         let (status, errors) = match self {
             AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, vec![detail(message)]),
             AppError::Validation(items) => (
@@ -113,6 +136,25 @@ impl IntoResponse for AppError {
 mod tests {
     use super::*;
     use axum::body::to_bytes;
+
+    #[test]
+    fn only_internal_errors_are_reported_to_posthog() {
+        assert!(exception_report(&AppError::Internal(anyhow::anyhow!("boom"))).is_some());
+        assert!(exception_report(&AppError::BadRequest("x".into())).is_none());
+        assert!(exception_report(&AppError::Validation(vec![])).is_none());
+        assert!(exception_report(&AppError::UnsupportedMediaType("x".into())).is_none());
+        assert!(exception_report(&AppError::NotFound).is_none());
+        assert!(exception_report(&AppError::MethodNotAllowed).is_none());
+    }
+
+    #[test]
+    fn internal_error_report_is_a_handled_500_with_the_cause() {
+        let report = exception_report(&AppError::Internal(anyhow::anyhow!("db down")))
+            .expect("internal errors are reported");
+        assert_eq!(report.kind, "AppError::Internal");
+        assert!(report.handled);
+        assert!(report.value.contains("db down"));
+    }
 
     #[tokio::test]
     async fn not_found_renders_404_json() {
