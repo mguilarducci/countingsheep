@@ -30,8 +30,12 @@ enum Enablement {
 }
 
 /// The resolved settings for when error tracking should actually run.
+///
+/// Crate-internal: produced by [`PostHogConfig::active`] and consumed only by
+/// `observability::error_tracking`. No external caller introspects a config, so
+/// this stays `pub(crate)` rather than widening the crate's public API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActivePostHog<'a> {
+pub(crate) struct ActivePostHog<'a> {
     /// PostHog project API key.
     pub api_key: &'a str,
     /// Ingestion host, or `None` to use the SDK default (US).
@@ -39,8 +43,11 @@ pub struct ActivePostHog<'a> {
 }
 
 /// Why error tracking is not running, for an unambiguous startup log.
+///
+/// Crate-internal for the same reason as [`ActivePostHog`]: only
+/// `observability::error_tracking` reads it (via [`PostHogConfig::disabled_reason`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DisabledReason {
+pub(crate) enum DisabledReason {
     /// `POSTHOG_ENABLED=false` — the explicit kill-switch.
     Killswitch,
     /// `POSTHOG_API_KEY` is unset or blank.
@@ -53,7 +60,7 @@ pub enum DisabledReason {
 impl DisabledReason {
     /// Whether this reason reflects operator misconfiguration (worth a `warn!`)
     /// rather than an intentional, expected disable (an `info!`).
-    pub fn is_misconfiguration(&self) -> bool {
+    pub(crate) fn is_misconfiguration(&self) -> bool {
         matches!(self, DisabledReason::InvalidEnabledValue(_))
     }
 }
@@ -117,7 +124,7 @@ impl PostHogConfig {
     /// The resolved settings when capture should run: enabled *and* a key
     /// present. `None` means error tracking is off — see
     /// [`PostHogConfig::disabled_reason`] for why.
-    pub fn active(&self) -> Option<ActivePostHog<'_>> {
+    pub(crate) fn active(&self) -> Option<ActivePostHog<'_>> {
         if self.enabled != Enablement::On {
             return None;
         }
@@ -131,7 +138,7 @@ impl PostHogConfig {
     /// Why capture is off, or `None` when it is active. A disabling
     /// `POSTHOG_ENABLED` value (explicit or malformed) takes precedence over a
     /// missing key so the log names the operator's own action.
-    pub fn disabled_reason(&self) -> Option<DisabledReason> {
+    pub(crate) fn disabled_reason(&self) -> Option<DisabledReason> {
         match &self.enabled {
             Enablement::Off => return Some(DisabledReason::Killswitch),
             Enablement::Invalid(raw) => {
