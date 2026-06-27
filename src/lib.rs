@@ -10,7 +10,7 @@ pub mod app;
 pub mod config;
 pub mod error;
 mod ingest;
-pub mod middleware;
+mod middleware;
 pub mod observability;
 mod router;
 pub mod util;

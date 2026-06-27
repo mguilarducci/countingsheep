@@ -19,13 +19,16 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Wraps the Axum router with application-wide, app-agnostic middleware.
 ///
+/// Crate-internal: reached only through [`crate::build_handler`], the single
+/// public entry point, so it stays off the crate's public API.
+///
 /// App-specific layers (auth, sessions, rate-limiting, metrics, CORS) belong
 /// here too — add them to the `ServiceBuilder` below.
 ///
 /// NOTE: trailing-slash normalization (`NormalizePathLayer`) is intentionally
 /// not included here; it must wrap the router at the make-service level to run
 /// before routing. Add it in `build_handler` when needed.
-pub fn apply_axum_middleware(_state: AppState, router: Router) -> Router {
+pub(crate) fn apply_axum_middleware(_state: AppState, router: Router) -> Router {
     router.layer(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
