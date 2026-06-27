@@ -1,0 +1,140 @@
+== building release server ==
+    Finished `release` profile [optimized] target(s) in 0.05s
+== starting server (PORT=8892 RUST_LOG=warn) ==
+Listening at http://127.0.0.1:8892
+server healthy at http://127.0.0.1:8892
+
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: /Users/mguilarducci/.no-mistakes/worktrees/c9eb02a1e540/01KW30A824V3045GKAY1S5X7TA/loadtest/k6/load.js
+        output: -
+
+     scenarios: (100.00%) 2 scenarios, 1000 max VUs, 46s max duration (incl. graceful stop):
+              * single: 3000.00 iterations/s for 8s (maxVUs: 50-500, exec: single, gracefulStop: 30s)
+              * batch: 3000.00 iterations/s for 8s (maxVUs: 50-500, exec: batch, startTime: 8s, gracefulStop: 30s)
+
+
+running (01.0s), 0001/0100 VUs, 2968 complete and 0 interrupted iterations
+single   [  12% ] 001/050 VUs  1.0s/8s  3000.00 iters/s
+batch  • [   0% ] waiting      7.0s    
+
+running (02.0s), 0000/0100 VUs, 5968 complete and 0 interrupted iterations
+single   [  25% ] 000/050 VUs  2.0s/8s  3000.00 iters/s
+batch  • [   0% ] waiting      6.0s    
+
+running (03.0s), 0001/0100 VUs, 8968 complete and 0 interrupted iterations
+single   [  37% ] 001/050 VUs  3.0s/8s  3000.00 iters/s
+batch  • [   0% ] waiting      5.0s    
+
+running (04.0s), 0001/0100 VUs, 11968 complete and 0 interrupted iterations
+single   [  50% ] 001/050 VUs  4.0s/8s  3000.00 iters/s
+batch  • [   0% ] waiting      4.0s    
+
+running (05.0s), 0000/0100 VUs, 14968 complete and 0 interrupted iterations
+single   [  62% ] 000/050 VUs  5.0s/8s  3000.00 iters/s
+batch  • [   0% ] waiting      3.0s    
+
+running (06.0s), 0000/0100 VUs, 17968 complete and 0 interrupted iterations
+single   [  75% ] 000/050 VUs  6.0s/8s  3000.00 iters/s
+batch  • [   0% ] waiting      2.0s    
+
+running (07.0s), 0001/0100 VUs, 20968 complete and 0 interrupted iterations
+single   [  87% ] 001/050 VUs  7.0s/8s  3000.00 iters/s
+batch  • [   0% ] waiting      1.0s    
+
+running (08.0s), 0001/0100 VUs, 23968 complete and 0 interrupted iterations
+single   [ 100% ] 001/050 VUs  8.0s/8s  3000.00 iters/s
+batch  • [   0% ] waiting      0.0s    
+
+running (09.0s), 0097/0147 VUs, 25754 complete and 0 interrupted iterations
+single ✓ [ 100% ] 000/050 VUs  8s       3000.00 iters/s
+batch    [  12% ] 097/097 VUs  1.0s/8s  3000.00 iters/s
+
+running (10.0s), 0116/0171 VUs, 27684 complete and 0 interrupted iterations
+single ✓ [ 100% ] 000/050 VUs  8s       3000.00 iters/s
+batch    [  25% ] 116/121 VUs  2.0s/8s  3000.00 iters/s
+
+running (11.0s), 0141/0194 VUs, 29505 complete and 0 interrupted iterations
+single ✓ [ 100% ] 000/050 VUs  8s       3000.00 iters/s
+batch    [  37% ] 144/144 VUs  3.0s/8s  3000.00 iters/s
+
+running (12.1s), 0164/0215 VUs, 31398 complete and 0 interrupted iterations
+single ✓ [ 100% ] 000/050 VUs  8s       3000.00 iters/s
+batch    [  51% ] 164/165 VUs  4.1s/8s  3000.00 iters/s
+
+running (13.0s), 0178/0229 VUs, 33281 complete and 0 interrupted iterations
+single ✓ [ 100% ] 000/050 VUs  8s       3000.00 iters/s
+batch    [  62% ] 178/179 VUs  5.0s/8s  3000.00 iters/s
+
+running (14.0s), 0197/0248 VUs, 35064 complete and 0 interrupted iterations
+single ✓ [ 100% ] 000/050 VUs  8s       3000.00 iters/s
+batch    [  75% ] 198/198 VUs  6.0s/8s  3000.00 iters/s
+
+running (15.0s), 0208/0260 VUs, 36951 complete and 0 interrupted iterations
+single ✓ [ 100% ] 000/050 VUs  8s       3000.00 iters/s
+batch    [  87% ] 208/210 VUs  7.0s/8s  3000.00 iters/s
+
+running (16.0s), 0030/0288 VUs, 39074 complete and 0 interrupted iterations
+single ✓ [ 100% ] 000/050 VUs  8s  3000.00 iters/s
+batch  ↓ [ 100% ] 213/237 VUs  8s  3000.00 iters/s
+
+
+  █ THRESHOLDS 
+
+    dropped_iterations
+    ✗ 'count<1' count=8898
+
+    http_req_duration{scenario:batch}
+    ✗ 'p(95)<25' p(95)=58.79ms
+
+    http_req_duration{scenario:single}
+    ✓ 'p(95)<5' p(95)=112µs
+    ✓ 'p(99)<15' p(99)=279µs
+
+    http_req_failed
+    ✓ 'rate<0.001' rate=0.00%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 78208   4858.562878/s
+    checks_succeeded...: 100.00% 78208 out of 78208
+    checks_failed......: 0.00%   0 out of 78208
+
+    ✓ status is 202
+    ✓ body is empty
+
+    HTTP
+    http_req_duration..............: avg=3.76ms  min=46µs    med=98µs     max=557.22ms p(90)=2.72ms  p(95)=7.69ms  
+      { expected_response:true }...: avg=3.76ms  min=46µs    med=98µs     max=557.22ms p(90)=2.72ms  p(95)=7.69ms  
+      { scenario:batch }...........: avg=9.59ms  min=109µs   med=1.06ms   max=557.22ms p(90)=13.5ms  p(95)=58.79ms 
+      { scenario:single }..........: avg=98.52µs min=46µs    med=88µs     max=11.29ms  p(90)=104µs   p(95)=112µs   
+    http_req_failed................: 0.00%  0 out of 39104
+    http_reqs......................: 39104  2429.281439/s
+
+    EXECUTION
+    dropped_iterations.............: 8898   552.775835/s
+    iteration_duration.............: avg=23.61ms min=72.41µs med=138.58µs max=851.45ms p(90)=86.34ms p(95)=150.53ms
+    iterations.....................: 39104  2429.281439/s
+    vus............................: 224    min=0          max=224
+    vus_max........................: 287    min=100        max=287
+
+    NETWORK
+    data_received..................: 3.2 MB 197 kB/s
+    data_sent......................: 151 MB 9.4 MB/s
+
+
+
+
+running (16.1s), 0000/0288 VUs, 39104 complete and 0 interrupted iterations
+single ✓ [ 100% ] 000/050 VUs  8s  3000.00 iters/s
+batch  ✓ [ 100% ] 000/238 VUs  8s  3000.00 iters/s
+time="2026-06-26T19:32:26-03:00" level=error msg="thresholds on metrics 'dropped_iterations, http_req_duration{scenario:batch}' have been crossed"
+Server has gracefully shut down!

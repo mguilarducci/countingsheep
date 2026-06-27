@@ -1,0 +1,42 @@
+running (2m45.0s), 0000/0187 VUs, 782341 complete and 0 interrupted iterations
+stress   [ 100% ] 0000/0187 VUs  2m45.0s/2m45s  0016.33 iters/s
+
+
+  █ THRESHOLDS 
+
+    http_req_failed
+    ✓ 'rate<0.05' rate=0.00%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 1564682 9482.530992/s
+    checks_succeeded...: 100.00% 1564682 out of 1564682
+    checks_failed......: 0.00%   0 out of 1564682
+
+    ✓ status is 202
+    ✓ body is empty
+
+    HTTP
+    http_req_duration..............: avg=246.45µs min=26µs    med=45µs    max=157.13ms p(90)=105µs    p(95)=174µs
+      { expected_response:true }...: avg=246.45µs min=26µs    med=45µs    max=157.13ms p(90)=105µs    p(95)=174µs
+    http_req_failed................: 0.00%  0 out of 782341
+    http_reqs......................: 782341 4741.265496/s
+
+    EXECUTION
+    dropped_iterations.............: 5158   31.25932/s
+    iteration_duration.............: avg=309.98µs min=54.91µs med=86.25µs max=160.7ms  p(90)=196.12µs p(95)=308µs
+    iterations.....................: 782341 4741.265496/s
+    vus............................: 0      min=0           max=66 
+    vus_max........................: 187    min=100         max=187
+
+    NETWORK
+    data_received..................: 63 MB  384 kB/s
+    data_sent......................: 190 MB 1.2 MB/s
+
+
+
+
+running (2m45.0s), 0000/0187 VUs, 782341 complete and 0 interrupted iterations
+stress ✓ [ 100% ] 0000/0187 VUs  2m45s  0016.33 iters/s
+Server has gracefully shut down!

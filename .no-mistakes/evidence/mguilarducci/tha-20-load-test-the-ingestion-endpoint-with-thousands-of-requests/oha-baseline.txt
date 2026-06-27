@@ -1,0 +1,100 @@
+== building release server ==
+    Finished `release` profile [optimized] target(s) in 0.13s
+== starting server (PORT=8893 RUST_LOG=warn) ==
+Listening at http://127.0.0.1:8893
+server healthy at http://127.0.0.1:8893
+
+== oha baseline ==
+target:    http://127.0.0.1:8893/api/v1/sheeps
+requests:  100000   concurrency: 50   batch size: 100
+
+--- single event (application/cloudevents+json) ---
+Summary:
+  Success rate:	100.00%
+  Total:	1835.7065 ms
+  Slowest:	127.4672 ms
+  Fastest:	0.0382 ms
+  Average:	0.9044 ms
+  Requests/sec:	54474.9404
+
+  Total data:	0 B
+  Size/request:	0 B
+  Size/sec:	0 B
+
+Response time histogram:
+    0.038 ms [1]     |
+   12.781 ms [99879] |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+   25.524 ms [21]    |
+   38.267 ms [12]    |
+   51.010 ms [18]    |
+   63.753 ms [10]    |
+   76.496 ms [30]    |
+   89.239 ms [3]     |
+  101.981 ms [0]     |
+  114.724 ms [0]     |
+  127.467 ms [26]    |
+
+Response time distribution:
+  10.00% in 0.3706 ms
+  25.00% in 0.5241 ms
+  50.00% in 0.7468 ms
+  75.00% in 1.0305 ms
+  90.00% in 1.3578 ms
+  95.00% in 1.6044 ms
+  99.00% in 2.3885 ms
+  99.90% in 24.7354 ms
+  99.99% in 126.1026 ms
+
+
+Details (average, fastest, slowest):
+  DNS+dialup:	1.2699 ms, 0.1446 ms, 2.9060 ms
+  DNS-lookup:	0.0941 ms, 0.0006 ms, 1.2767 ms
+
+Status code distribution:
+  [202] 100000 responses
+
+--- batch of 100 (application/cloudevents-batch+json) ---
+Summary:
+  Success rate:	100.00%
+  Total:	3924.6353 ms
+  Slowest:	21.7035 ms
+  Fastest:	0.1160 ms
+  Average:	1.9594 ms
+  Requests/sec:	25480.0749
+
+  Total data:	0 B
+  Size/request:	0 B
+  Size/sec:	0 B
+
+Response time histogram:
+   0.116 ms [1]     |
+   2.275 ms [69897] |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+   4.433 ms [26990] |■■■■■■■■■■■■
+   6.592 ms [2753]  |■
+   8.751 ms [263]   |
+  10.910 ms [67]    |
+  13.068 ms [17]    |
+  15.227 ms [4]     |
+  17.386 ms [1]     |
+  19.545 ms [6]     |
+  21.704 ms [1]     |
+
+Response time distribution:
+  10.00% in 0.8485 ms
+  25.00% in 1.2341 ms
+  50.00% in 1.7404 ms
+  75.00% in 2.4636 ms
+  90.00% in 3.3277 ms
+  95.00% in 3.9701 ms
+  99.00% in 5.5877 ms
+  99.90% in 8.6610 ms
+  99.99% in 13.5892 ms
+
+
+Details (average, fastest, slowest):
+  DNS+dialup:	0.3451 ms, 0.0901 ms, 1.3885 ms
+  DNS-lookup:	0.0057 ms, 0.0006 ms, 0.0617 ms
+
+Status code distribution:
+  [202] 100000 responses
+Server has gracefully shut down!

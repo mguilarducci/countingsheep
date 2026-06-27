@@ -1,0 +1,45 @@
+running (1m19.0s), 0000/0505 VUs, 117809 complete and 0 interrupted iterations
+spike   [  99% ] 0000/0505 VUs  1m19.0s/1m20s  0200.00 iters/s
+
+running (1m20.0s), 0000/0505 VUs, 118009 complete and 0 interrupted iterations
+spike   [ 100% ] 0000/0505 VUs  1m20.0s/1m20s  0200.00 iters/s
+
+
+  █ THRESHOLDS 
+
+    http_req_failed
+    ✓ 'rate<0.05' rate=0.00%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 236022  2950.139662/s
+    checks_succeeded...: 100.00% 236022 out of 236022
+    checks_failed......: 0.00%   0 out of 236022
+
+    ✓ status is 202
+    ✓ body is empty
+
+    HTTP
+    http_req_duration..............: avg=23.55ms min=28µs    med=4.1ms  max=886.71ms p(90)=64.86ms p(95)=121.19ms
+      { expected_response:true }...: avg=23.55ms min=28µs    med=4.1ms  max=886.71ms p(90)=64.86ms p(95)=121.19ms
+    http_req_failed................: 0.00%  0 out of 118011
+    http_reqs......................: 118011 1475.069831/s
+
+    EXECUTION
+    dropped_iterations.............: 92988  1162.29668/s
+    iteration_duration.............: avg=29.43ms min=57.66µs med=5.64ms max=966.63ms p(90)=88.84ms p(95)=147.19ms
+    iterations.....................: 118011 1475.069831/s
+    vus............................: 0      min=0           max=400
+    vus_max........................: 505    min=100         max=505
+
+    NETWORK
+    data_received..................: 9.6 MB 120 kB/s
+    data_sent......................: 29 MB  357 kB/s
+
+
+
+
+running (1m20.0s), 0000/0505 VUs, 118011 complete and 0 interrupted iterations
+spike ✓ [ 100% ] 0000/0505 VUs  1m20s  0200.00 iters/s
+Server has gracefully shut down!
