@@ -1,4 +1,11 @@
 //! Application error type and its HTTP/JSON rendering.
+//!
+//! This is an internal module (not part of the crate's public API). `AppError`
+//! is the request-handling layer's mechanism for turning failures into HTTP
+//! responses; it is produced and consumed entirely within the crate (by
+//! `router` and `ingest`). The binary only sees the `axum::Router` returned by
+//! [`crate::build_handler`] and never names this type, so it stays `mod`, not
+//! `pub mod`.
 
 use axum::Json;
 use axum::http::StatusCode;
