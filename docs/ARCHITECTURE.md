@@ -32,6 +32,15 @@ dev-dependency.
   flags are read from the real process environment in `bin/server.rs` *before*
   `.env` is loaded, so a stray `.env` can never flip the bind address.
 - **Observability:** `src/util/tracing.rs` configures the subscriber.
+  `src/observability/error_tracking.rs` captures panics and 5xx (`AppError::
+  Internal`) to PostHog as `$exception` events. It is safe by default: a no-op
+  when `POSTHOG_API_KEY` is unset or `POSTHOG_ENABLED=false`, delivered
+  fire-and-forget so it never blocks or fails a request, and always logged
+  (enable/disable and failures) so logs stay the source of truth. The two
+  capture seams are the `CatchPanicLayer` panic handler in `src/middleware.rs`
+  (handled = false) and `AppError::into_response` in `src/error.rs`
+  (handled = true); both reach a process-global reporter because their
+  signatures cannot carry `AppState`.
 - **Ingestion:** `src/ingest/`. `sheep.rs` holds the `Sheep` type and a pure,
   IO-free `validate()` (CloudEvents v1.0.2; collects every failure at once;
   keeps `time` as a UTC `OffsetDateTime`). `stamp.rs` holds the equally pure

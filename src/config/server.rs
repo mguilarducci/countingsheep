@@ -5,6 +5,8 @@ use std::net::IpAddr;
 use anyhow::Context;
 use countingsheep_env_vars::var;
 
+use crate::config::PostHogConfig;
+
 /// Default ceiling on events per batch when `MAX_BATCH_EVENTS` is unset.
 const DEFAULT_MAX_BATCH_EVENTS: usize = 1000;
 
@@ -13,6 +15,8 @@ pub struct Server {
     pub port: u16,
     /// Maximum number of events accepted in a single batch submission.
     pub max_batch_events: usize,
+    /// PostHog error-tracking configuration.
+    pub posthog: PostHogConfig,
 }
 
 impl Server {
@@ -37,10 +41,13 @@ impl Server {
             None => DEFAULT_MAX_BATCH_EVENTS,
         };
 
+        let posthog = PostHogConfig::from_environment()?;
+
         Ok(Server {
             ip,
             port,
             max_batch_events,
+            posthog,
         })
     }
 
