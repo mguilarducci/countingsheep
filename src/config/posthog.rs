@@ -81,8 +81,8 @@ impl fmt::Display for DisabledReason {
 
 impl Default for PostHogConfig {
     /// A disabled-by-absence default: the kill-switch is on, but there is no
-    /// key, so [`PostHogConfig::active`] is `None`. Used by tests and by any
-    /// `Server` built without reading the environment.
+    /// key, so capture is off. Used by tests and by any `Server` built without
+    /// reading the environment.
     fn default() -> Self {
         Self {
             api_key: None,

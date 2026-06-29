@@ -4,7 +4,7 @@
 //! # Design
 //!
 //! The two places an error actually surfaces — the `CatchPanicLayer` panic
-//! handler and [`crate::error::AppError`]'s `into_response` — both have
+//! handler and `AppError`'s `into_response` — both have
 //! signatures that cannot receive application state, so capture goes through a
 //! process-global reporter (mirroring how the `tracing` subscriber is already
 //! global, and how `posthog-rs` itself exposes a global client).
