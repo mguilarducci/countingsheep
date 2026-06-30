@@ -1,4 +1,11 @@
 //! Application error type and its HTTP/JSON rendering.
+//!
+//! This is an internal module (not part of the crate's public API). `AppError`
+//! is the request-handling layer's mechanism for turning failures into HTTP
+//! responses; it is produced and consumed entirely within the crate (by
+//! `router` and `ingest`). The binary only sees the `axum::Router` returned by
+//! [`crate::build_handler`] and never names this type, so it stays `mod`, not
+//! `pub mod`.
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -12,14 +19,14 @@ use crate::observability::error_tracking::{self, ExceptionReport};
 /// a batch submission; it is `None` for single-event requests, which keeps the
 /// single-event response shape (`{ "detail": ... }`, no `index`) unchanged.
 #[derive(Debug)]
-pub struct ValidationItem {
+pub(crate) struct ValidationItem {
     pub index: Option<usize>,
     pub detail: String,
 }
 
 impl ValidationItem {
     /// A failure tied to event `index` within a batch submission.
-    pub fn at(index: usize, detail: String) -> Self {
+    pub(crate) fn at(index: usize, detail: String) -> Self {
         Self {
             index: Some(index),
             detail,
@@ -39,7 +46,7 @@ impl From<String> for ValidationItem {
 
 /// The application's error type. Add a variant to extend the contract.
 #[derive(Debug, thiserror::Error)]
-pub enum AppError {
+pub(crate) enum AppError {
     #[error("{0}")]
     BadRequest(String),
     /// One or more validation failures; each becomes its own `detail`, carrying
@@ -59,12 +66,12 @@ pub enum AppError {
     Internal(#[from] anyhow::Error),
 }
 
-pub type AppResult<T> = Result<T, AppError>;
+pub(crate) type AppResult<T> = Result<T, AppError>;
 
 impl AppError {
     /// Builds a `Validation` error from plain detail strings with no batch
     /// position — the single-event ingestion path.
-    pub fn validation(details: Vec<String>) -> Self {
+    pub(crate) fn validation(details: Vec<String>) -> Self {
         AppError::Validation(details.into_iter().map(ValidationItem::from).collect())
     }
 }

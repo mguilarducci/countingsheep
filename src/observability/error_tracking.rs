@@ -4,7 +4,7 @@
 //! # Design
 //!
 //! The two places an error actually surfaces — the `CatchPanicLayer` panic
-//! handler and [`crate::error::AppError`]'s `into_response` — both have
+//! handler and `AppError`'s `into_response` — both have
 //! signatures that cannot receive application state, so capture goes through a
 //! process-global reporter (mirroring how the `tracing` subscriber is already
 //! global, and how `posthog-rs` itself exposes a global client).
@@ -33,8 +33,12 @@ use crate::config::PostHogConfig;
 const SERVICE_DISTINCT_ID: &str = "countingsheep-backend";
 
 /// A normalized exception ready to report.
+///
+/// Crate-internal: it is built and consumed entirely within this crate (by
+/// `error.rs` and the reporting functions below). The binary only touches
+/// [`init`]/[`shutdown`], so this type never needs to cross the crate boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExceptionReport {
+pub(crate) struct ExceptionReport {
     /// Becomes `$exception_list[].type` — e.g. `"AppError::Internal"` or
     /// `"panic"`.
     pub kind: String,
@@ -44,8 +48,12 @@ pub struct ExceptionReport {
     pub handled: bool,
 }
 
-/// Where reported exceptions go. This trait is the seam tests fake.
-pub trait ExceptionSink: Send + Sync {
+/// Where reported exceptions go — a crate-internal seam. It is deliberately not
+/// `pub`: there is no public installer ([`init`] is the only writer of `SINK`,
+/// and only ever from config), so nothing outside the crate can supply a sink.
+/// The only implementors are this module's `NoopSink`/`PosthogSink` and the
+/// tests that fake it.
+pub(crate) trait ExceptionSink: Send + Sync {
     /// Deliver one exception. Implementations must not block the caller.
     fn report(&self, report: ExceptionReport);
 }
@@ -125,14 +133,14 @@ pub async fn shutdown() {
 }
 
 /// Report an exception through the global sink. A no-op until [`init`] has run.
-pub fn report_exception(report: ExceptionReport) {
+pub(crate) fn report_exception(report: ExceptionReport) {
     if let Some(sink) = SINK.get() {
         dispatch(sink.as_ref(), report);
     }
 }
 
 /// Capture a panic message (handled = false).
-pub fn report_panic(message: String) {
+pub(crate) fn report_panic(message: String) {
     report_exception(panic_report(message));
 }
 
@@ -148,7 +156,7 @@ fn dispatch(sink: &dyn ExceptionSink, report: ExceptionReport) {
 
 /// The exception report for a 5xx server fault, carrying the full `anyhow`
 /// cause chain (outermost first) as the value.
-pub fn internal_report(error: &anyhow::Error) -> ExceptionReport {
+pub(crate) fn internal_report(error: &anyhow::Error) -> ExceptionReport {
     ExceptionReport {
         kind: "AppError::Internal".to_string(),
         // `{:#}` renders the full cause chain on one line, outermost first.
@@ -168,7 +176,7 @@ fn panic_report(message: String) -> ExceptionReport {
 
 /// Extract a human-readable message from a panic payload, tolerating the common
 /// `&str`/`String` shapes and anything else.
-pub fn panic_message(payload: &(dyn Any + Send)) -> String {
+pub(crate) fn panic_message(payload: &(dyn Any + Send)) -> String {
     if let Some(message) = payload.downcast_ref::<&str>() {
         (*message).to_string()
     } else if let Some(message) = payload.downcast_ref::<String>() {

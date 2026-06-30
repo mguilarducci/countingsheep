@@ -1,16 +1,15 @@
 use std::sync::Arc;
 
 pub use crate::app::App;
-pub use crate::error::{AppError, AppResult};
 
 use crate::app::AppState;
 use crate::router::build_axum_router;
 
 pub mod app;
 pub mod config;
-pub mod error;
+mod error;
 mod ingest;
-pub mod middleware;
+mod middleware;
 pub mod observability;
 mod router;
 pub mod util;

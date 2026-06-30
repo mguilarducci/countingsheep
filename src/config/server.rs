@@ -1,15 +1,21 @@
 //! Configuration for the HTTP server.
 
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 
 use anyhow::Context;
 use countingsheep_env_vars::var;
 
 use crate::config::PostHogConfig;
 
+/// Default port to bind when `PORT` is unset.
+const DEFAULT_PORT: u16 = 8888;
+
 /// Default ceiling on events per batch when `MAX_BATCH_EVENTS` is unset.
 const DEFAULT_MAX_BATCH_EVENTS: usize = 1000;
 
+/// The API key inside `posthog` is redacted from this `Debug`, since
+/// [`PostHogConfig`]'s own `Debug` impl does the redaction.
+#[derive(Debug)]
 pub struct Server {
     pub ip: IpAddr,
     pub port: u16,
@@ -33,7 +39,7 @@ impl Server {
 
         let port = match var("PORT")? {
             Some(raw) => parse_port(&raw)?,
-            None => 8888,
+            None => DEFAULT_PORT,
         };
 
         let max_batch_events = match var("MAX_BATCH_EVENTS")? {
@@ -53,9 +59,9 @@ impl Server {
 
     fn bind_ip(expose_externally: bool) -> IpAddr {
         if expose_externally {
-            [0, 0, 0, 0].into()
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED)
         } else {
-            [127, 0, 0, 1].into()
+            IpAddr::V4(Ipv4Addr::LOCALHOST)
         }
     }
 }
@@ -81,7 +87,6 @@ fn parse_max_batch_events(raw: &str) -> anyhow::Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv4Addr;
 
     #[test]
     fn exposed_binds_all_interfaces() {
@@ -136,5 +141,23 @@ mod tests {
     #[test]
     fn default_max_batch_events_is_1000() {
         assert_eq!(DEFAULT_MAX_BATCH_EVENTS, 1000);
+    }
+
+    #[test]
+    fn debug_delegates_to_the_redacting_posthog_debug() {
+        let config = Server {
+            ip: [127, 0, 0, 1].into(),
+            port: 8888,
+            max_batch_events: DEFAULT_MAX_BATCH_EVENTS,
+            posthog: PostHogConfig::default(),
+        };
+
+        // The derived Debug must route the secret-bearing field through
+        // `PostHogConfig`'s own redacting Debug (proven by its
+        // `debug_redacts_the_api_key` test) rather than printing its fields
+        // directly — that delegation is what keeps the API key out of logs.
+        let rendered = format!("{config:?}");
+        assert!(rendered.contains("PostHogConfig"));
+        assert!(rendered.contains("max_batch_events: 1000"));
     }
 }

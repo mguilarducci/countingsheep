@@ -6,7 +6,7 @@ use crate::error::AppError;
 use crate::ingest::handler::create_sheep;
 
 /// Builds the application's Axum router with all routes and the shared state.
-pub fn build_axum_router(state: AppState) -> Router {
+pub(crate) fn build_axum_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/api/v1/sheeps", post(create_sheep))
