@@ -102,6 +102,21 @@ server as a CPU-pinned container, and drive it with k6/oha from the host (or a
 second container) — so the numbers reflect a containerized deploy and the
 generator stops stealing the server's cores.
 
+## Broker requirement
+
+The server now publishes accepted events to Kafka. Load-test runs therefore
+require a running broker. Start the local KRaft broker before any load-test
+tier:
+
+```sh
+docker compose -f docker-compose.kafka.yml up -d
+# … run your tier …
+docker compose -f docker-compose.kafka.yml down
+```
+
+Set `KAFKA_BROKERS=localhost:9092` (or the relevant address) in your shell or
+`.env` file. The broker is **not** started by `run.sh` — bring it up manually.
+
 ## Method reminders (the why is in the plan)
 
 - Build with `cargo build --release` — debug numbers are meaningless. `run.sh` does this.
