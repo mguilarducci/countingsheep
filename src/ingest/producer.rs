@@ -13,6 +13,7 @@ use rdkafka::types::RDKafkaErrorCode;
 use tracing::warn;
 
 use crate::config::KafkaConfig;
+use crate::ingest::stamp::AcceptedSheep;
 
 /// One message ready for Kafka: partition key, serialized value, and the two
 /// attributes carried as headers.
@@ -128,9 +129,37 @@ impl Producer for KafkaProducer {
     }
 }
 
+/// Serialize an accepted sheep into a `ProducedMessage` ready to enqueue.
+///
+/// The Kafka payload is a flat JSON object carrying the CloudEvents fields
+/// relevant for metering: `id`, `type`, `source`, `subject`, `time` (as a
+/// unix-seconds integer from `occurred_at`), and `data` (null when absent).
+/// `received_at` is not part of the payload — it travels as a Kafka header
+/// (set by `KafkaProducer::produce`). The partition key is the event subject.
+pub(crate) fn serialize_flattened(accepted: &AcceptedSheep) -> ProducedMessage {
+    let sheep = &accepted.sheep;
+    let payload = serde_json::json!({
+        "id": sheep.id,
+        "type": sheep.r#type,
+        "source": sheep.source,
+        "subject": sheep.subject,
+        "time": accepted.occurred_at.unix_timestamp(),
+        "data": sheep.data,
+    });
+    ProducedMessage {
+        key: sheep.subject.clone(),
+        payload: serde_json::to_vec(&payload).expect("serializing JSON value cannot fail"),
+        specversion: sheep.specversion.clone(),
+        received_at_unix: accepted.received_at.unix_timestamp(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ingest::sheep::Sheep;
+    use crate::ingest::stamp::AcceptedSheep;
+    use time::macros::datetime;
 
     #[test]
     fn from_config_rejects_empty_brokers() {
@@ -145,5 +174,67 @@ mod tests {
     fn from_config_builds_with_brokers() {
         let config = KafkaConfig::for_test("localhost:9092");
         assert!(KafkaProducer::from_config(&config).is_ok());
+    }
+
+    fn accepted() -> AcceptedSheep {
+        AcceptedSheep {
+            sheep: Sheep {
+                id: "evt-1".into(),
+                source: "/svc".into(),
+                r#type: "usage.created".into(),
+                specversion: "1.0".into(),
+                subject: "customer-1".into(),
+                time: Some(datetime!(2026-06-20 08:30:00 UTC)),
+                data: Some(serde_json::json!({ "tokens": 42 })),
+                datacontenttype: None,
+                dataschema: None,
+            },
+            occurred_at: datetime!(2026-06-20 08:30:00 UTC),
+            received_at: datetime!(2026-06-26 10:00:00 UTC),
+        }
+    }
+
+    #[test]
+    fn serialize_flattened_unix_time() {
+        let msg = serialize_flattened(&accepted());
+        let payload: serde_json::Value = serde_json::from_slice(&msg.payload).unwrap();
+        assert_eq!(
+            payload["time"],
+            datetime!(2026-06-20 08:30:00 UTC).unix_timestamp()
+        );
+    }
+
+    #[test]
+    fn serialize_flattened_embeds_data() {
+        let msg = serialize_flattened(&accepted());
+        let payload: serde_json::Value = serde_json::from_slice(&msg.payload).unwrap();
+        assert_eq!(payload["data"], serde_json::json!({ "tokens": 42 }));
+    }
+
+    #[test]
+    fn serialize_flattened_null_data_when_absent() {
+        let mut a = accepted();
+        a.sheep.data = None;
+        let msg = serialize_flattened(&a);
+        let payload: serde_json::Value = serde_json::from_slice(&msg.payload).unwrap();
+        assert!(payload["data"].is_null());
+    }
+
+    #[test]
+    fn serialize_flattened_key_is_subject() {
+        let msg = serialize_flattened(&accepted());
+        assert_eq!(msg.key, "customer-1");
+    }
+
+    #[test]
+    fn serialize_flattened_received_at_is_our_clock() {
+        // `received_at` (our ingestion clock) rides as a header, separate from
+        // the payload `time` (`occurred_at`). The fixture's two dates differ, so
+        // this pins the distinction — a swap of the two would fail here.
+        let msg = serialize_flattened(&accepted());
+        assert_eq!(
+            msg.received_at_unix,
+            datetime!(2026-06-26 10:00:00 UTC).unix_timestamp()
+        );
     }
 }

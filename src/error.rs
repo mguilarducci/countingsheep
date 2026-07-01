@@ -61,12 +61,8 @@ pub(crate) enum AppError {
     /// A known path reached with an unsupported HTTP method.
     #[error("method not allowed")]
     MethodNotAllowed,
-    /// Local back-pressure (e.g. producer queue full). Asks client
-    /// retry; not code fault, so not captured PostHog.
-    // Constructed by the Kafka publish seam (plan Task 8, `record_accepted` on
-    // `ProduceError::QueueFull`). Remove this `expect` there — once the variant
-    // is constructed the expectation becomes unfulfilled and clippy will flag it.
-    #[allow(dead_code)] // constructed by the Kafka publish task (plan Task 8)
+    /// Local back-pressure (e.g. producer queue full). Asks client to
+    /// retry; not a code fault, so not captured to PostHog.
     #[error("{0}")]
     ServiceUnavailable(String),
     /// Internal failures. The cause is logged; the client sees a generic 500.
