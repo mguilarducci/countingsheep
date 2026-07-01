@@ -21,10 +21,15 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full map.
 
 ```sh
 cp .env.sample .env
+docker compose -f docker-compose.kafka.yml up -d  # local Kafka broker
 just run      # start the server (http://127.0.0.1:8888)
 just test     # run the test suite
 just check    # fmt + clippy + tests (what CI runs)
 ```
+
+The server publishes accepted events to Kafka and **requires `KAFKA_BROKERS`**
+(set in `.env.sample`); an unset broker fails startup. The local KRaft broker in
+`docker-compose.kafka.yml` covers dev — see the `KAFKA_*` vars in `.env.sample`.
 
 Requires the toolchain pinned in `rust-toolchain.toml`, plus
 [`just`](https://github.com/casey/just) and

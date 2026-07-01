@@ -1,0 +1,59 @@
+End-to-end Kafka publishing round-trip
+======================================
+
+Broker : docker-compose.kafka.yml (apache/kafka 3.9.0, KRaft) on localhost:9092
+Server : ./target/debug/server with KAFKA_BROKERS=localhost:9092 KAFKA_TOPIC=sheeps
+Flow   : HTTP POST /api/v1/sheeps  ->  KafkaProducer  ->  topic "sheeps"  ->  consumed below
+
+HTTP results observed:
+  - single CloudEvent            -> 202 Accepted
+  - batch of 2 CloudEvents       -> 202 Accepted
+  - batch with a missing subject -> 400 Bad Request  {"errors":[{"detail":"subject is required","index":1}]}
+                                    (all-or-nothing: NOTHING published for the invalid batch)
+
+Records consumed from topic "sheeps" (kafka-console-consumer, --from-beginning)
+-------------------------------------------------------------------------------
+
+[1] (from the gated integration test kafka_roundtrip_enqueues_without_error)
+    partition : 0
+    headers   : specversion=1.0, received_at=0
+    key       : integration-test-subject
+    value     : {"id":"it-1","type":"usage.created","source":"/test","subject":"integration-test-subject","time":0,"data":null}
+
+[2] single POST (subject = customer-42, explicit time)
+    partition : 0
+    headers   : specversion=1.0, received_at=1782920416
+    key       : customer-42
+    value     : {"data":{"model":"opus","tokens":1500},"id":"evt-roundtrip-1","source":"/billing","subject":"customer-42","time":1781944200,"type":"usage.recorded"}
+    note      : payload time 1781944200 == 2026-06-20T08:30:00Z (occurred_at);
+                received_at header (1782920416) is the distinct ingestion clock.
+
+[3] batch event a (subject = customer-7, no time -> defaulted to ingestion now)
+    partition : 0
+    headers   : specversion=1.0, received_at=1782920416
+    key       : customer-7
+    value     : {"data":{"tokens":10},"id":"evt-batch-a","source":"/billing","subject":"customer-7","time":1782920416,"type":"usage.recorded"}
+
+[4] batch event b (subject = customer-99)
+    partition : 0
+    headers   : specversion=1.0, received_at=1782920416
+    key       : customer-99
+    value     : {"data":{"tokens":20},"id":"evt-batch-b","source":"/billing","subject":"customer-99","time":1782920416,"type":"usage.recorded"}
+
+Confirmed behaviors (design decisions from the branch):
+  * subject is the Kafka partition key                      (keys above)
+  * flattened CloudEvents wire format: id/type/source/      (value payloads)
+    subject/time(unix seconds)/data
+  * specversion + received_at carried as Kafka headers      (headers above)
+  * occurred_at (payload "time") vs received_at (header)     ([2]: 1781944200 vs 1782920416)
+    are distinct clocks
+  * one clock read per batch: [3] and [4] share received_at 1782920416
+  * missing time defaults to ingestion "now": [3]/[4] time == received_at
+  * batch validation is all-or-nothing: the invalid batch published 0 records
+    (only 4 records total on the topic: 1 integration-test + 3 HTTP posts)
+
+Raw consumer output (kafka-console-consumer, print.key/headers/partition):
+Partition:0  headers=[specversion:1.0,received_at:0]           key=integration-test-subject  value={"id":"it-1","type":"usage.created","source":"/test","subject":"integration-test-subject","time":0,"data":null}
+Partition:0  headers=[specversion:1.0,received_at:1782920416]  key=customer-42                value={"data":{"model":"opus","tokens":1500},"id":"evt-roundtrip-1","source":"/billing","subject":"customer-42","time":1781944200,"type":"usage.recorded"}
+Partition:0  headers=[specversion:1.0,received_at:1782920416]  key=customer-7                 value={"data":{"tokens":10},"id":"evt-batch-a","source":"/billing","subject":"customer-7","time":1782920416,"type":"usage.recorded"}
+Partition:0  headers=[specversion:1.0,received_at:1782920416]  key=customer-99                value={"data":{"tokens":20},"id":"evt-batch-b","source":"/billing","subject":"customer-99","time":1782920416,"type":"usage.recorded"}

@@ -1,5 +1,8 @@
 //! In-process test harness for the countingsheep HTTP app.
 
+mod producer;
+pub use producer::FakeProducer;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -11,6 +14,7 @@ use axum::response::Response;
 use countingsheep::app::App;
 use countingsheep::build_handler;
 use countingsheep::config::Server;
+use countingsheep::{ProducedMessage, Producer};
 use http_body_util::BodyExt;
 use serde::de::DeserializeOwned;
 use tower::ServiceExt;
@@ -22,6 +26,7 @@ const DEFAULT_TEST_MAX_BATCH_EVENTS: usize = 1000;
 /// A booted application, ready to accept requests in-process (no socket).
 pub struct TestApp {
     router: Router,
+    producer: Arc<FakeProducer>,
 }
 
 impl TestApp {
@@ -33,6 +38,28 @@ impl TestApp {
     /// Boots the app with a custom batch cap, so oversize-batch tests can trip
     /// the limit with a handful of events instead of building a thousand.
     pub fn with_max_batch_events(max_batch_events: usize) -> Self {
+        Self::build(max_batch_events, Arc::new(FakeProducer::new()))
+    }
+
+    /// Boots the app whose producer always reports QueueFull, to exercise the
+    /// 503 back-pressure path.
+    pub fn with_failing_producer() -> Self {
+        Self::build(
+            DEFAULT_TEST_MAX_BATCH_EVENTS,
+            Arc::new(FakeProducer::failing_queue_full()),
+        )
+    }
+
+    /// Boots the app whose producer always returns a backend error, to exercise
+    /// the 500 internal-error path.
+    pub fn with_backend_failing_producer() -> Self {
+        Self::build(
+            DEFAULT_TEST_MAX_BATCH_EVENTS,
+            Arc::new(FakeProducer::failing_backend()),
+        )
+    }
+
+    fn build(max_batch_events: usize, producer: Arc<FakeProducer>) -> Self {
         countingsheep::util::tracing::init_for_test();
 
         let config = Server {
@@ -40,11 +67,22 @@ impl TestApp {
             port: 0,
             max_batch_events,
             posthog: countingsheep::config::PostHogConfig::default(),
+            kafka: countingsheep::config::KafkaConfig::default(),
         };
-        let app = Arc::new(App::builder().config(Arc::new(config)).build());
+        let app = Arc::new(
+            App::builder()
+                .config(Arc::new(config))
+                .producer(producer.clone() as Arc<dyn Producer>)
+                .build(),
+        );
         let router = build_handler(app);
 
-        Self { router }
+        Self { router, producer }
+    }
+
+    /// Messages the app published during this test.
+    pub fn published(&self) -> Vec<ProducedMessage> {
+        self.producer.produced()
     }
 
     /// Sends a pre-built request through the full middleware stack.

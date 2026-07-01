@@ -85,9 +85,10 @@ Treat these as a smoke-of-the-harness, not the official baseline.
 
 This harness runs **natively on the host**: `run.sh` builds and runs the
 `server` binary directly, and k6/oha run as host processes against it over
-loopback. There are **no containers** involved — the repo's only Docker is the
-dev `.devcontainer`, and there is no production image yet. Deliberate for now
-(fast to iterate), but be honest about the gaps:
+loopback. The **server and generator are not containerized** — the only
+container in the loop is the Kafka broker (`docker-compose.kafka.yml`, see
+above), and there is no production image yet. Deliberate for now (fast to
+iterate), but be honest about the gaps:
 
 - **Not a containerized deploy.** Container CPU/memory limits, the Linux network
   stack, and the `0.0.0.0` bind path are all absent. Native numbers are an
@@ -101,6 +102,21 @@ dev `.devcontainer`, and there is no production image yet. Deliberate for now
 server as a CPU-pinned container, and drive it with k6/oha from the host (or a
 second container) — so the numbers reflect a containerized deploy and the
 generator stops stealing the server's cores.
+
+## Broker requirement
+
+The server now publishes accepted events to Kafka. Load-test runs therefore
+require a running broker. Start the local KRaft broker before any load-test
+tier:
+
+```sh
+docker compose -f docker-compose.kafka.yml up -d
+# … run your tier …
+docker compose -f docker-compose.kafka.yml down
+```
+
+Set `KAFKA_BROKERS=localhost:9092` (or the relevant address) in your shell or
+`.env` file. The broker is **not** started by `run.sh` — bring it up manually.
 
 ## Method reminders (the why is in the plan)
 

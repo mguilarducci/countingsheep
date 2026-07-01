@@ -5,7 +5,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use anyhow::Context;
 use countingsheep_env_vars::var;
 
-use crate::config::PostHogConfig;
+use crate::config::{KafkaConfig, PostHogConfig};
 
 /// Default port to bind when `PORT` is unset.
 const DEFAULT_PORT: u16 = 8888;
@@ -23,6 +23,8 @@ pub struct Server {
     pub max_batch_events: usize,
     /// PostHog error-tracking configuration.
     pub posthog: PostHogConfig,
+    /// Kafka producer configuration.
+    pub kafka: KafkaConfig,
 }
 
 impl Server {
@@ -48,12 +50,14 @@ impl Server {
         };
 
         let posthog = PostHogConfig::from_environment()?;
+        let kafka = KafkaConfig::from_environment();
 
         Ok(Server {
             ip,
             port,
             max_batch_events,
             posthog,
+            kafka,
         })
     }
 
@@ -150,6 +154,7 @@ mod tests {
             port: 8888,
             max_batch_events: DEFAULT_MAX_BATCH_EVENTS,
             posthog: PostHogConfig::default(),
+            kafka: KafkaConfig::default(),
         };
 
         // The derived Debug must route the secret-bearing field through

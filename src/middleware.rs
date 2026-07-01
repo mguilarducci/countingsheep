@@ -61,13 +61,30 @@ mod tests {
     use crate::app::{App, AppState};
     use crate::build_handler;
     use crate::config::{PostHogConfig, Server};
+    use crate::ingest::producer::{ProduceError, ProducedMessage, Producer};
     use axum::Router;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use axum::routing::get;
     use std::any::Any;
     use std::sync::Arc;
+    use std::time::Duration;
     use tower::ServiceExt;
+
+    /// Minimal no-op producer for unit tests that don't exercise publishing.
+    #[derive(Debug)]
+    struct NoopProducer;
+
+    impl Producer for NoopProducer {
+        fn produce(&self, _message: &ProducedMessage) -> Result<(), ProduceError> {
+            Ok(())
+        }
+        fn flush(&self, _timeout: Duration) {}
+    }
+
+    fn noop_producer() -> Arc<dyn Producer> {
+        Arc::new(NoopProducer)
+    }
 
     fn test_state() -> AppState {
         let config = Server {
@@ -75,8 +92,14 @@ mod tests {
             port: 0,
             max_batch_events: 1000,
             posthog: PostHogConfig::default(),
+            kafka: crate::config::KafkaConfig::default(),
         };
-        AppState(Arc::new(App::builder().config(Arc::new(config)).build()))
+        AppState(Arc::new(
+            App::builder()
+                .config(Arc::new(config))
+                .producer(noop_producer())
+                .build(),
+        ))
     }
 
     #[tokio::test]
@@ -116,8 +139,14 @@ mod tests {
             port: 0,
             max_batch_events: 1000,
             posthog: crate::config::PostHogConfig::default(),
+            kafka: crate::config::KafkaConfig::default(),
         };
-        let app = Arc::new(App::builder().config(Arc::new(config)).build());
+        let app = Arc::new(
+            App::builder()
+                .config(Arc::new(config))
+                .producer(noop_producer())
+                .build(),
+        );
         let handler = build_handler(app);
 
         let request = Request::builder()
