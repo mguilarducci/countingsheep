@@ -24,7 +24,14 @@ fn main() -> anyhow::Result<()> {
 
     let config = Server::from_environment(expose_externally)?;
 
-    let app = App::builder().config(Arc::new(config)).build();
+    // Kafka is required: an unconfigured broker fails startup here (D6).
+    let producer: std::sync::Arc<dyn countingsheep::Producer> =
+        std::sync::Arc::new(countingsheep::KafkaProducer::from_config(&config.kafka)?);
+
+    let app = App::builder()
+        .config(Arc::new(config))
+        .producer(producer.clone())
+        .build();
     let app = Arc::new(app);
 
     let handler = build_handler(app.clone());
@@ -54,6 +61,9 @@ fn main() -> anyhow::Result<()> {
 
         // Drain any buffered exception events before the process exits.
         countingsheep::observability::error_tracking::shutdown().await;
+
+        // Drain librdkafka's buffer before exit (mirrors error_tracking::shutdown).
+        producer.flush(std::time::Duration::from_secs(30));
 
         result
     })?;
