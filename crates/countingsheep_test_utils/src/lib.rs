@@ -1,5 +1,8 @@
 //! In-process test harness for the countingsheep HTTP app.
 
+mod producer;
+pub use producer::FakeProducer;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 
