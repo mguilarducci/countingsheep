@@ -61,6 +61,14 @@ pub(crate) enum AppError {
     /// A known path reached with an unsupported HTTP method.
     #[error("method not allowed")]
     MethodNotAllowed,
+    /// Local back-pressure (e.g. producer queue full). Asks client
+    /// retry; not code fault, so not captured PostHog.
+    // Constructed by the Kafka publish seam (plan Task 8, `record_accepted` on
+    // `ProduceError::QueueFull`). Remove this `expect` there — once the variant
+    // is constructed the expectation becomes unfulfilled and clippy will flag it.
+    #[expect(dead_code, reason = "constructed by the Kafka publish task (plan Task 8)")]
+    #[error("{0}")]
+    ServiceUnavailable(String),
     /// Internal failures. The cause is logged; the client sees a generic 500.
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
@@ -98,6 +106,7 @@ fn exception_report(error: &AppError) -> Option<ExceptionReport> {
         AppError::BadRequest(_)
         | AppError::Validation(_)
         | AppError::UnsupportedMediaType(_)
+        | AppError::ServiceUnavailable(_)
         | AppError::NotFound
         | AppError::MethodNotAllowed => None,
     }
@@ -120,6 +129,9 @@ impl IntoResponse for AppError {
             ),
             AppError::UnsupportedMediaType(message) => {
                 (StatusCode::UNSUPPORTED_MEDIA_TYPE, vec![detail(message)])
+            }
+            AppError::ServiceUnavailable(message) => {
+                (StatusCode::SERVICE_UNAVAILABLE, vec![detail(message)])
             }
             AppError::NotFound => (StatusCode::NOT_FOUND, vec![detail("not found".to_string())]),
             AppError::MethodNotAllowed => (
@@ -150,6 +162,7 @@ mod tests {
         assert!(exception_report(&AppError::BadRequest("x".into())).is_none());
         assert!(exception_report(&AppError::Validation(vec![])).is_none());
         assert!(exception_report(&AppError::UnsupportedMediaType("x".into())).is_none());
+        assert!(exception_report(&AppError::ServiceUnavailable("x".into())).is_none());
         assert!(exception_report(&AppError::NotFound).is_none());
         assert!(exception_report(&AppError::MethodNotAllowed).is_none());
     }
@@ -278,6 +291,19 @@ mod tests {
         assert_eq!(
             json,
             serde_json::json!({ "errors": [{ "detail": "nope" }] })
+        );
+    }
+
+    #[tokio::test]
+    async fn service_unavailable_renders_503_json() {
+        let response = AppError::ServiceUnavailable("kafka queue full".into()).into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "errors": [{ "detail": "kafka queue full" }] })
         );
     }
 }
