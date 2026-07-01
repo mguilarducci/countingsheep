@@ -39,6 +39,7 @@ target
 
 # Superpowers specs/plans — kept local, attached to the Linear issue instead
 docs/superpowers/
+.superpowers/
 
 # Lavish — generated review/planning artifacts, kept local
 .lavish/
