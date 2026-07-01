@@ -12,7 +12,7 @@ pub(crate) struct Sheep {
     pub source: String,
     pub r#type: String,
     pub specversion: String,
-    pub subject: Option<String>,
+    pub subject: String,
     pub time: Option<OffsetDateTime>,
     pub data: Option<Value>,
     pub datacontenttype: Option<String>,
@@ -158,7 +158,7 @@ pub(crate) fn validate(value: Value) -> Result<Sheep, Vec<String>> {
         errors.push(format!("specversion must be \"1.0\", got \"{sv}\""));
     }
 
-    let subject = optional_string(obj, "subject", &mut errors);
+    let subject = required_string(obj, "subject", &mut errors);
     let datacontenttype = optional_media_type(obj, "datacontenttype", &mut errors);
     let dataschema = optional_uri(obj, "dataschema", &mut errors);
 
@@ -189,7 +189,7 @@ pub(crate) fn validate(value: Value) -> Result<Sheep, Vec<String>> {
         source: source.unwrap(),
         r#type: kind.unwrap(),
         specversion: specversion.unwrap(),
-        subject,
+        subject: subject.unwrap(),
         time,
         data,
         datacontenttype,
@@ -203,7 +203,8 @@ mod tests {
     use serde_json::json;
 
     fn valid() -> Value {
-        json!({ "id": "a-1", "source": "/svc", "type": "usage.created", "specversion": "1.0" })
+        json!({ "id": "a-1", "source": "/svc", "type": "usage.created",
+                "specversion": "1.0", "subject": "customer-1" })
     }
 
     #[test]
@@ -220,13 +221,13 @@ mod tests {
             "data": { "tokens": 42 }, "tenantid": "extension-ok"
         });
         let s = validate(v).unwrap();
-        assert_eq!(s.subject.as_deref(), Some("tenant-9"));
+        assert_eq!(s.subject, "tenant-9");
         assert_eq!(s.data, Some(json!({ "tokens": 42 })));
     }
 
     #[test]
     fn rejects_missing_and_empty_required() {
-        for key in ["id", "source", "type", "specversion"] {
+        for key in ["id", "source", "type", "specversion", "subject"] {
             let mut missing = valid();
             missing.as_object_mut().unwrap().remove(key);
             assert!(validate(missing).is_err(), "missing {key} should fail");
@@ -349,7 +350,7 @@ mod tests {
         // string/URI when present; datacontenttype must be a valid RFC 2046
         // media type (an empty string is not). A present-but-empty optional is
         // malformed, not absent.
-        for key in ["subject", "dataschema", "datacontenttype"] {
+        for key in ["dataschema", "datacontenttype"] {
             let mut v = valid();
             v[key] = json!("");
             let errs = validate(v).unwrap_err();
@@ -370,7 +371,11 @@ mod tests {
     #[test]
     fn reports_all_errors_at_once() {
         let errs = validate(json!({ "specversion": "1.0" })).unwrap_err();
-        assert_eq!(errs.len(), 3, "expected id + source + type, got {errs:?}");
+        assert_eq!(
+            errs.len(),
+            4,
+            "expected id + source + type + subject, got {errs:?}"
+        );
     }
 
     #[test]

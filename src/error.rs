@@ -66,7 +66,7 @@ pub(crate) enum AppError {
     // Constructed by the Kafka publish seam (plan Task 8, `record_accepted` on
     // `ProduceError::QueueFull`). Remove this `expect` there — once the variant
     // is constructed the expectation becomes unfulfilled and clippy will flag it.
-    #[expect(dead_code, reason = "constructed by the Kafka publish task (plan Task 8)")]
+    #[allow(dead_code)] // constructed by the Kafka publish task (plan Task 8)
     #[error("{0}")]
     ServiceUnavailable(String),
     /// Internal failures. The cause is logged; the client sees a generic 500.

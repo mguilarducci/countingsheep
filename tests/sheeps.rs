@@ -4,7 +4,8 @@ use countingsheep_test_utils::TestApp;
 use serde_json::{Value, json};
 
 fn valid_sheep() -> Value {
-    json!({ "id": "a-1", "source": "/svc", "type": "usage.created", "specversion": "1.0" })
+    json!({ "id": "a-1", "source": "/svc", "type": "usage.created",
+            "specversion": "1.0", "subject": "customer-1" })
 }
 
 #[tokio::test]
@@ -109,7 +110,7 @@ async fn reports_multiple_errors_at_once() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     let json: Value = response.json();
-    assert_eq!(json["errors"].as_array().unwrap().len(), 3);
+    assert_eq!(json["errors"].as_array().unwrap().len(), 4);
 }
 
 #[tokio::test]
@@ -364,22 +365,22 @@ async fn scattered_invalid_events_report_correct_indices() {
 
 #[tokio::test]
 async fn collects_every_error_across_events_with_indices() {
-    // A 3-error event (index 0) next to a 2-error event (index 1) => 5 errors,
+    // A 4-error event (index 0) next to a 3-error event (index 1) => 7 errors,
     // each correctly indexed: per-event all-at-once times across-batch.
     let app = TestApp::init();
-    let three_errors = json!({ "specversion": "1.0" }); // missing id, source, type
-    let two_errors = json!({ "specversion": "1.0", "type": "usage.created" }); // missing id, source
+    let four_errors = json!({ "specversion": "1.0" }); // missing id, source, type, subject
+    let three_errors = json!({ "specversion": "1.0", "type": "usage.created" }); // missing id, source, subject
 
     let response = app
-        .post_cloudevent_batch("/api/v1/sheeps", vec![three_errors, two_errors])
+        .post_cloudevent_batch("/api/v1/sheeps", vec![four_errors, three_errors])
         .await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let json: Value = response.json();
     let errors = json["errors"].as_array().unwrap();
 
-    assert_eq!(errors.len(), 5, "expected 5 errors, got {errors:?}");
-    assert_eq!(errors.iter().filter(|e| e["index"] == 0).count(), 3);
-    assert_eq!(errors.iter().filter(|e| e["index"] == 1).count(), 2);
+    assert_eq!(errors.len(), 7, "expected 7 errors, got {errors:?}");
+    assert_eq!(errors.iter().filter(|e| e["index"] == 0).count(), 4);
+    assert_eq!(errors.iter().filter(|e| e["index"] == 1).count(), 3);
 }
 
 // --- Boundaries & resource safety ---
@@ -431,7 +432,7 @@ async fn cap_is_checked_before_validation() {
     // error, not validation errors — proving the cap short-circuits before we
     // spend work validating events.
     let app = TestApp::with_max_batch_events(2);
-    let invalid = json!({ "specversion": "1.0" }); // missing id, source, type
+    let invalid = json!({ "specversion": "1.0" }); // missing id, source, type, subject
     let response = app
         .post_cloudevent_batch(
             "/api/v1/sheeps",

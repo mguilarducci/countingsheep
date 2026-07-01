@@ -142,7 +142,7 @@ mod tests {
             source: "/svc".into(),
             r#type: "usage.created".into(),
             specversion: "1.0".into(),
-            subject: None,
+            subject: "customer-1".into(),
             time: Some(datetime!(2026-06-20 08:30:00 UTC)),
             data: None,
             datacontenttype: None,
