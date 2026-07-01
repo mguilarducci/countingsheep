@@ -346,10 +346,10 @@ mod tests {
 
     #[test]
     fn rejects_empty_optional_attributes() {
-        // CloudEvents v1.0.2: subject and dataschema MUST be a non-empty
-        // string/URI when present; datacontenttype must be a valid RFC 2046
-        // media type (an empty string is not). A present-but-empty optional is
-        // malformed, not absent.
+        // CloudEvents v1.0.2: `dataschema` must be a non-empty absolute URI
+        // when present; `datacontenttype` must be a valid RFC 2046 media type
+        // (an empty string is not). A present-but-empty optional is malformed,
+        // not absent.
         for key in ["dataschema", "datacontenttype"] {
             let mut v = valid();
             v[key] = json!("");

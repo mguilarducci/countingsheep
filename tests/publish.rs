@@ -60,3 +60,11 @@ async fn queue_full_maps_to_503() {
     let response = app.post_cloudevent("/api/v1/sheeps", event()).await;
     assert_eq!(response.status(), 503);
 }
+
+#[tokio::test]
+async fn backend_error_maps_to_500() {
+    let app = TestApp::with_backend_failing_producer();
+    let response = app.post_cloudevent("/api/v1/sheeps", event()).await;
+    assert_eq!(response.status(), 500);
+    assert!(app.published().is_empty());
+}

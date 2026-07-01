@@ -53,7 +53,7 @@ impl fmt::Debug for KafkaProducer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("KafkaProducer")
             .field("topic", &self.topic)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

@@ -8,7 +8,7 @@
 //! `pub mod`.
 
 use axum::Json;
-use axum::http::StatusCode;
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 use tracing::error;
@@ -117,6 +117,8 @@ impl IntoResponse for AppError {
             error_tracking::report_exception(report);
         }
 
+        let add_retry_after = matches!(&self, AppError::ServiceUnavailable(_));
+
         let (status, errors) = match self {
             AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, vec![detail(message)]),
             AppError::Validation(items) => (
@@ -143,7 +145,14 @@ impl IntoResponse for AppError {
             }
         };
 
-        (status, Json(json!({ "errors": errors }))).into_response()
+        let mut response = (status, Json(json!({ "errors": errors }))).into_response();
+        // Spec §5: 503 carries a Retry-After header so clients back off.
+        if add_retry_after {
+            response
+                .headers_mut()
+                .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+        }
+        response
     }
 }
 
@@ -291,9 +300,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn service_unavailable_renders_503_json() {
+    async fn service_unavailable_renders_503_with_retry_after() {
         let response = AppError::ServiceUnavailable("kafka queue full".into()).into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        // Spec §5: 503 must carry Retry-After: 1 so clients back off.
+        let retry_after = response
+            .headers()
+            .get(header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned);
+        assert_eq!(
+            retry_after.as_deref(),
+            Some("1"),
+            "503 must include Retry-After: 1"
+        );
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();

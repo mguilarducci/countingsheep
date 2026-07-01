@@ -50,6 +50,15 @@ impl TestApp {
         )
     }
 
+    /// Boots the app whose producer always returns a backend error, to exercise
+    /// the 500 internal-error path.
+    pub fn with_backend_failing_producer() -> Self {
+        Self::build(
+            DEFAULT_TEST_MAX_BATCH_EVENTS,
+            Arc::new(FakeProducer::failing_backend()),
+        )
+    }
+
     fn build(max_batch_events: usize, producer: Arc<FakeProducer>) -> Self {
         countingsheep::util::tracing::init_for_test();
 

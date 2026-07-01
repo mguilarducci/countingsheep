@@ -5,11 +5,20 @@ use std::time::Duration;
 
 use countingsheep::{ProduceError, ProducedMessage, Producer};
 
-/// Records produced messages; optionally fails every `produce` with QueueFull.
+#[derive(Debug, Default)]
+enum Mode {
+    #[default]
+    Record,
+    QueueFull,
+    Backend,
+}
+
+/// Records produced messages; optionally fails every `produce` with a
+/// configured error mode.
 #[derive(Debug, Default)]
 pub struct FakeProducer {
     produced: Mutex<Vec<ProducedMessage>>,
-    fail_queue_full: bool,
+    mode: Mode,
 }
 
 impl FakeProducer {
@@ -20,7 +29,15 @@ impl FakeProducer {
     pub fn failing_queue_full() -> Self {
         Self {
             produced: Mutex::new(Vec::new()),
-            fail_queue_full: true,
+            mode: Mode::QueueFull,
+        }
+    }
+
+    /// Every `produce` call returns `Err(ProduceError::Backend(...))`.
+    pub fn failing_backend() -> Self {
+        Self {
+            produced: Mutex::new(Vec::new()),
+            mode: Mode::Backend,
         }
     }
 
@@ -32,8 +49,10 @@ impl FakeProducer {
 
 impl Producer for FakeProducer {
     fn produce(&self, message: &ProducedMessage) -> Result<(), ProduceError> {
-        if self.fail_queue_full {
-            return Err(ProduceError::QueueFull);
+        match self.mode {
+            Mode::QueueFull => return Err(ProduceError::QueueFull),
+            Mode::Backend => return Err(ProduceError::Backend("boom".into())),
+            Mode::Record => {}
         }
         self.produced.lock().unwrap().push(message.clone());
         Ok(())
@@ -69,6 +88,16 @@ mod tests {
         assert!(matches!(
             p.produce(&message()),
             Err(ProduceError::QueueFull)
+        ));
+        assert!(p.produced().is_empty());
+    }
+
+    #[test]
+    fn failing_backend_mode_returns_backend_error() {
+        let p = FakeProducer::failing_backend();
+        assert!(matches!(
+            p.produce(&message()),
+            Err(ProduceError::Backend(_))
         ));
         assert!(p.produced().is_empty());
     }
