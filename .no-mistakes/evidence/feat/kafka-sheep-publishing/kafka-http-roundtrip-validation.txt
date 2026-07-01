@@ -1,0 +1,63 @@
+End-to-end HTTP -> Kafka round-trip (validation run, 2026-07-01)
+================================================================
+
+Goal (user intent): accepted usage events ("sheeps") published into a Kafka
+topic via a producer wired into the record_accepted seam, using a flattened
+CloudEvents wire format, subject as the partition key, non-blocking delivery.
+
+Setup
+-----
+Broker : docker-compose.kafka.yml  (apache/kafka 3.9.0, KRaft) on localhost:9092
+Server : ./target/debug/server  with  KAFKA_BROKERS=localhost:9092
+                                       KAFKA_TOPIC=sheeps-http-evidence  PORT=8099
+Flow   : HTTP POST /api/v1/sheeps -> KafkaProducer -> topic "sheeps-http-evidence"
+         -> consumed with kafka-console-consumer (--from-beginning)
+
+HTTP requests observed (real curl transcript)
+---------------------------------------------
+[A] single CloudEvent  (application/cloudevents+json)
+    subject=customer-42, explicit time=2026-06-20T08:30:00Z
+    -> HTTP 202  (empty body)
+
+[B] valid batch of 2   (application/cloudevents-batch+json)
+    customer-7 (no time), customer-99
+    -> HTTP 202  (empty body)
+
+[C] invalid batch      (application/cloudevents-batch+json)
+    customer-should-not-appear (valid) + one event MISSING subject
+    -> HTTP 400  {"errors":[{"detail":"subject is required","index":1}]}
+       all-or-nothing: NOTHING from this batch was published
+
+Records consumed from topic "sheeps-http-evidence"
+--------------------------------------------------
+Exactly 3 records on the topic (the invalid batch published 0). Fields per line:
+partition, headers, key, JSON value.
+
+  Partition:0  headers=[specversion:1.0,received_at:1782920787]  key=customer-42
+    value={"data":{"model":"opus","tokens":1500},"id":"evt-roundtrip-1","source":"/billing","subject":"customer-42","time":1781944200,"type":"usage.recorded"}
+
+  Partition:0  headers=[specversion:1.0,received_at:1782920787]  key=customer-7
+    value={"data":{"tokens":10},"id":"evt-batch-a","source":"/billing","subject":"customer-7","time":1782920787,"type":"usage.recorded"}
+
+  Partition:0  headers=[specversion:1.0,received_at:1782920787]  key=customer-99
+    value={"data":{"tokens":20},"id":"evt-batch-b","source":"/billing","subject":"customer-99","time":1782920787,"type":"usage.recorded"}
+
+Design decisions confirmed by the live data
+-------------------------------------------
+  * subject is the Kafka partition key          -> keys: customer-42 / customer-7 / customer-99
+  * flattened CloudEvents payload               -> id / type / source / subject / time(unix s) / data
+  * specversion + received_at carried as headers-> headers above
+  * occurred_at (payload "time") is distinct from received_at (header):
+      customer-42 payload time 1781944200 == 2026-06-20T08:30:00Z (the input's explicit time)
+      received_at header 1782920787          == 2026-07-01T15:46:27Z (ingestion "now")
+  * missing time defaults to ingestion now      -> customer-7 has no input time; its payload
+                                                   time == received_at (1782920787)
+  * one clock read per batch                    -> customer-7 and customer-99 share received_at 1782920787
+  * batch validation is all-or-nothing          -> the invalid batch (subject "customer-should-not-appear")
+                                                   produced 0 records; only the 3 valid events landed
+
+Automated tests exercised alongside this run
+--------------------------------------------
+  * cargo nextest run --test publish --test sheeps           (33 passed) — HTTP->produce seam via FakeProducer
+  * KAFKA_BROKERS=localhost:9092 KAFKA_TOPIC=sheeps \
+      cargo nextest run --test kafka_integration --run-ignored all   (1 passed) — real-broker enqueue+flush

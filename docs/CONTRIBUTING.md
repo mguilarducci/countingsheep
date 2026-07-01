@@ -11,6 +11,9 @@ Or set it up locally:
 2. Install [`just`](https://github.com/casey/just) and
    [`cargo-nextest`](https://nexte.st/).
 3. `cp .env.sample .env`.
+4. Start a local Kafka broker — the server requires one (`docker compose -f
+   docker-compose.kafka.yml up -d`). Tests use a fake producer and need no
+   broker; the gated round-trip in `tests/kafka_integration.rs` is the exception.
 
 ## Workflow
 

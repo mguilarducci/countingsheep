@@ -85,9 +85,10 @@ Treat these as a smoke-of-the-harness, not the official baseline.
 
 This harness runs **natively on the host**: `run.sh` builds and runs the
 `server` binary directly, and k6/oha run as host processes against it over
-loopback. There are **no containers** involved — the repo's only Docker is the
-dev `.devcontainer`, and there is no production image yet. Deliberate for now
-(fast to iterate), but be honest about the gaps:
+loopback. The **server and generator are not containerized** — the only
+container in the loop is the Kafka broker (`docker-compose.kafka.yml`, see
+above), and there is no production image yet. Deliberate for now (fast to
+iterate), but be honest about the gaps:
 
 - **Not a containerized deploy.** Container CPU/memory limits, the Linux network
   stack, and the `0.0.0.0` bind path are all absent. Native numbers are an

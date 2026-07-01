@@ -23,7 +23,14 @@
   `src/observability/error_tracking.rs`. Safe by default (a no-op unless
   `POSTHOG_API_KEY` is set and `POSTHOG_ENABLED` is not `false`), fire-and-
   forget, and always logged — logs stay the source of truth.
-- Tests: `cargo nextest`; integration tests use `TestApp`.
+- Kafka publishing: accepted events are published from `src/ingest/producer.rs`
+  via the `Producer` seam (`KafkaProducer` in prod, `FakeProducer` in tests).
+  Configured with `KAFKA_*` env vars; **required** — an unset `KAFKA_BROKERS`
+  fails startup. Delivery is non-blocking (a full local queue → `503`), and the
+  buffer is flushed on shutdown. Local broker: `docker-compose.kafka.yml`.
+- Tests: `cargo nextest`; integration tests use `TestApp`. A gated broker
+  round-trip lives in `tests/kafka_integration.rs` (`#[ignore]`; run it with a
+  live broker via `cargo test -- --ignored`).
 
 ## Commands
 
