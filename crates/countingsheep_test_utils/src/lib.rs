@@ -40,6 +40,7 @@ impl TestApp {
             port: 0,
             max_batch_events,
             posthog: countingsheep::config::PostHogConfig::default(),
+            kafka: countingsheep::config::KafkaConfig::default(),
         };
         let app = Arc::new(App::builder().config(Arc::new(config)).build());
         let router = build_handler(app);

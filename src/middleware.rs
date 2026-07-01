@@ -75,6 +75,7 @@ mod tests {
             port: 0,
             max_batch_events: 1000,
             posthog: PostHogConfig::default(),
+            kafka: crate::config::KafkaConfig::default(),
         };
         AppState(Arc::new(App::builder().config(Arc::new(config)).build()))
     }
@@ -116,6 +117,7 @@ mod tests {
             port: 0,
             max_batch_events: 1000,
             posthog: crate::config::PostHogConfig::default(),
+            kafka: crate::config::KafkaConfig::default(),
         };
         let app = Arc::new(App::builder().config(Arc::new(config)).build());
         let handler = build_handler(app);
