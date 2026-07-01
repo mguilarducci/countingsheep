@@ -14,9 +14,9 @@ use countingsheep::KafkaProducer;
 use countingsheep::config::KafkaConfig;
 use countingsheep::{ProducedMessage, Producer};
 
-#[test]
+#[tokio::test(flavor = "multi_thread")]
 #[ignore = "requires a running Kafka broker (docker-compose.kafka.yml)"]
-fn kafka_roundtrip_enqueues_without_error() {
+async fn kafka_roundtrip_enqueues_without_error() {
     let config = KafkaConfig::from_environment();
     let producer =
         KafkaProducer::from_config(&config).expect("broker configured via KAFKA_BROKERS");

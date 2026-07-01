@@ -117,6 +117,17 @@ impl KafkaConfig {
             ..Self::default()
         }
     }
+
+    pub(crate) fn for_test_sasl(brokers: &str, security_protocol: &str) -> Self {
+        Self {
+            brokers: brokers.into(),
+            security_protocol: security_protocol.into(),
+            sasl_mechanism: Some("SCRAM-SHA-256".into()),
+            sasl_username: Some("user".into()),
+            sasl_password: Some("secret".into()),
+            ..Self::default()
+        }
+    }
 }
 
 #[cfg(test)]

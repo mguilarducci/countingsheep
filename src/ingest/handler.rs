@@ -57,10 +57,15 @@ fn ingest_single(producer: &dyn Producer, body: &Bytes) -> AppResult<StatusCode>
     Ok(StatusCode::ACCEPTED)
 }
 
-/// Validate and accept a batch array. All-or-nothing: every event is validated
-/// and, only if all pass, every event is recorded — so a partial failure
-/// records nothing. Each failure carries its event's index. The size cap is
-/// enforced *before* validation, so an oversized batch is rejected cheaply.
+/// Validate and accept a batch array. Validation is all-or-nothing: every
+/// event is validated first and, if any fails, the whole batch is rejected and
+/// nothing is published — each failure carries its event's index. Publishing,
+/// however, is per-event: once validation passes, events are enqueued one by
+/// one, so a mid-batch producer failure (queue full → 503, backend → 500) may
+/// leave earlier events already enqueued. A client that retries the whole batch
+/// can therefore re-publish those; Kafka idempotence dedupes only within a
+/// producer session, not across separate requests. The size cap is enforced
+/// *before* validation, so an oversized batch is rejected cheaply.
 fn ingest_batch(
     producer: &dyn Producer,
     body: &Bytes,

@@ -73,6 +73,15 @@ impl KafkaProducer {
             .set("message.timeout.ms", "30000");
 
         if let Some((mechanism, username, password)) = config.sasl() {
+            anyhow::ensure!(
+                config
+                    .security_protocol()
+                    .to_ascii_lowercase()
+                    .contains("sasl"),
+                "KAFKA_SASL_* is set but KAFKA_SECURITY_PROTOCOL is {:?}; \
+                 set it to sasl_ssl or sasl_plaintext or librdkafka ignores the credentials",
+                config.security_protocol()
+            );
             client_config
                 .set("sasl.mechanism", mechanism)
                 .set("sasl.username", username)
@@ -173,6 +182,22 @@ mod tests {
     #[test]
     fn from_config_builds_with_brokers() {
         let config = KafkaConfig::for_test("localhost:9092");
+        assert!(KafkaProducer::from_config(&config).is_ok());
+    }
+
+    #[test]
+    fn from_config_rejects_sasl_without_sasl_protocol() {
+        // SASL credentials with a plaintext protocol would be silently ignored
+        // by librdkafka; surface the misconfiguration at startup instead.
+        let config = KafkaConfig::for_test_sasl("localhost:9092", "plaintext");
+        let err = KafkaProducer::from_config(&config)
+            .expect_err("SASL creds without a SASL protocol must fail startup");
+        assert!(err.to_string().contains("KAFKA_SECURITY_PROTOCOL"));
+    }
+
+    #[test]
+    fn from_config_builds_with_sasl_and_sasl_protocol() {
+        let config = KafkaConfig::for_test_sasl("localhost:9092", "sasl_ssl");
         assert!(KafkaProducer::from_config(&config).is_ok());
     }
 
