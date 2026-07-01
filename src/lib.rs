@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 pub use crate::app::App;
+pub use crate::ingest::producer::{KafkaProducer, ProduceError, ProducedMessage, Producer};
 
 use crate::app::AppState;
 use crate::router::build_axum_router;

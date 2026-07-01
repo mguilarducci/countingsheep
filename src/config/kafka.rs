@@ -110,6 +110,16 @@ impl KafkaConfig {
 }
 
 #[cfg(test)]
+impl KafkaConfig {
+    pub(crate) fn for_test(brokers: &str) -> Self {
+        Self {
+            brokers: brokers.into(),
+            ..Self::default()
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
